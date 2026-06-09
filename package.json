@@ -1,0 +1,16 @@
+{
+  "name": "gh-aegis",
+  "version": "0.1.0",
+  "description": "Defensive AI security middleware — prompt injection, jailbreak, PII, tool-OOB detection. Zero-ML: regex + rule engine.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}
