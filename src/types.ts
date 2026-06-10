@@ -1,5 +1,5 @@
 /**
- * Aegis v0.1 — Type definitions
+ * Aegis v0.2 — Type definitions
  * OWASP LLM Top 10 reference: LLM01 (Prompt Injection), LLM02 (Insecure Output),
  * LLM08 (Excessive Agency)
  */
@@ -67,6 +67,17 @@ export interface ScanResult {
    * Never echo these back to the end user (information leakage risk).
    */
   details?: string[];
+
+  /**
+   * v0.2 — PII-sanitized version of the scanned string.
+   * Only populated when scope = "output".
+   * - PII detected: each match replaced with [REDACTED:<pattern-label>]
+   * - No PII detected: equals the original (truncated) input unchanged
+   * - scope = "input" | "tool": field is absent (undefined)
+   *
+   * Safe to surface to end-users; original input must remain internal.
+   */
+  sanitized?: string;
 }
 
 // ─── Main Interface ───────────────────────────────────────────────────────────
