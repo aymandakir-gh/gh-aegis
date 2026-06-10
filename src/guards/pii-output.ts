@@ -2,6 +2,9 @@
  * PII Output guard — LLM02
  * Detects personally identifiable information in LLM responses.
  * Patterns: email, phone, IBAN, API keys, GitHub tokens, codice fiscale.
+ *
+ * v0.2: adds `sanitized` to every ScanResult — each PII match is replaced
+ * with `[REDACTED:<pattern-label>]` so callers can surface safe output.
  */
 import type { ScanContext, ScanResult } from "../types";
 import { ThreatType } from "../types";
@@ -63,17 +66,31 @@ const PII_PATTERNS: PiiPattern[] = [
   },
 ];
 
+/**
+ * Build a global-flag version of a regex for replace-all operations.
+ * Preserves existing flags (e.g. 'i') and appends 'g' if missing.
+ */
+function toGlobal(re: RegExp): RegExp {
+  const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
+  return new RegExp(re.source, flags);
+}
+
 export function scanPiiOutput(
   input: string,
   _context?: ScanContext,
 ): ScanResult {
   let maxScore = 0;
   const matched: string[] = [];
+  // sanitized is built up cumulatively — each matched pattern redacts in place
+  let sanitized = input;
 
   for (const { pattern, score, label } of PII_PATTERNS) {
+    // Detect against original input (pattern has no 'g' flag — test() is stateless)
     if (pattern.test(input)) {
       matched.push(label);
       if (score > maxScore) maxScore = score;
+      // Replace ALL occurrences in the accumulating sanitized string
+      sanitized = sanitized.replace(toGlobal(pattern), `[REDACTED:${label}]`);
     }
   }
 
@@ -83,8 +100,10 @@ export function scanPiiOutput(
       threatType: ThreatType.PII_OUTPUT,
       score: maxScore,
       details: [`PII detected in LLM output: ${matched.join(", ")}`],
+      sanitized,
     };
   }
 
-  return { safe: true, score: 0 };
+  // No PII — sanitized equals the original input unchanged
+  return { safe: true, score: 0, sanitized: input };
 }
