@@ -11,6 +11,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createAegisGuard } from "./aegis-guard.js";
+import { parsePolicy } from "./policy.js";
+import type { AegisPolicy } from "./policy.js";
 
 function version(): string {
   try {
@@ -30,9 +32,10 @@ Usage:
   npx gh-aegis scan app.log
 
 Options:
-  --json          Output findings as JSON
-  -h, --help      Show this help
-  -v, --version   Show version
+  --json            Output findings as JSON
+  --policy <file>   Load a declarative policy (detectors/scopes/thresholds/redaction)
+  -h, --help        Show this help
+  -v, --version     Show version
 
 Exit codes: 0 = clean, 1 = findings detected, 2 = usage or IO error.
 `;
@@ -57,8 +60,24 @@ interface CliFinding {
 
 /** Run the CLI. Returns the process exit code (does not call process.exit). */
 export async function run(argv: string[]): Promise<number> {
-  const flags = new Set(argv.filter((a) => a.startsWith("-") && a !== "-"));
-  const positionals = argv.filter((a) => !a.startsWith("-") || a === "-");
+  // Extract `--policy <file>` / `--policy=<file>` before generic flag parsing.
+  let policyPath: string | undefined;
+  const rest: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--policy") {
+      policyPath = argv[++i];
+      continue;
+    }
+    if (a.startsWith("--policy=")) {
+      policyPath = a.slice("--policy=".length);
+      continue;
+    }
+    rest.push(a);
+  }
+
+  const flags = new Set(rest.filter((a) => a.startsWith("-") && a !== "-"));
+  const positionals = rest.filter((a) => !a.startsWith("-") || a === "-");
 
   if (flags.has("-h") || flags.has("--help")) {
     process.stdout.write(HELP);
@@ -83,6 +102,25 @@ export async function run(argv: string[]): Promise<number> {
     return 2;
   }
 
+  let policy: AegisPolicy | undefined;
+  if (policyPath !== undefined) {
+    let rawPolicy: string;
+    try {
+      rawPolicy = readFileSync(policyPath, "utf8");
+    } catch {
+      process.stderr.write(`error: cannot read policy file ${policyPath}\n`);
+      return 2;
+    }
+    try {
+      policy = parsePolicy(JSON.parse(rawPolicy));
+    } catch (err) {
+      process.stderr.write(
+        `error: invalid policy ${policyPath}: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      return 2;
+    }
+  }
+
   let text: string;
   try {
     text = target === "-" ? await readStdin() : readFileSync(target, "utf8");
@@ -91,7 +129,7 @@ export async function run(argv: string[]): Promise<number> {
     return 2;
   }
 
-  const guard = createAegisGuard({ enabled: true });
+  const guard = createAegisGuard({ enabled: true, policy });
   const lines = text.split(/\r?\n/);
   const findings: CliFinding[] = [];
 

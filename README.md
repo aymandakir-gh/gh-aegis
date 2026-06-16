@@ -23,6 +23,7 @@ if (!result.safe) throw new Error(`Blocked: ${result.threatType}`);
 
 - 🛡️ **8 OWASP families** — LLM01, LLM02, LLM04, LLM05, LLM06, LLM07, LLM08, LLM10 (see the [map](#owasp-llm-top-10-coverage)).
 - 🔒 **PII + secret redaction** — get a safe `sanitized` copy of model output.
+- 🧩 **Declarative policy** — toggle detectors/scopes/thresholds/redaction from a validated JSON file.
 - 🔌 **Drop-in adapters** — Express, Fastify, and the Vercel AI SDK.
 - 🖥️ **CLI** — `npx gh-aegis scan app.log`.
 - 📊 **Reproducible benchmark** — `npm run bench` reports precision/recall/F1 over a committed dataset; CI fails on regressions.
@@ -217,6 +218,48 @@ interface ScanResult {
 > **Disabled by default.** A guard with no `enabled` flag and no `AEGIS_ENABLED=true` is a no-op
 > that returns `{ safe: true, score: 0 }`. Enable it where you want enforcement.
 
+## Declarative policy
+
+A **policy** is a JSON object (or file) that turns detectors on/off, restricts which scopes are
+scanned, raises per-detector score thresholds, and toggles redaction. It is validated by a
+zero-dependency validator — an unknown key or bad value is rejected loudly, never silently ignored.
+
+```jsonc
+{
+  "scopes": { "input": true, "output": true, "tool": false },
+  "detectors": {
+    "jailbreak": false,                       // turn one detector off
+    "pii": { "enabled": true, "minScore": 90 } // only block higher-confidence PII
+  },
+  "redaction": true,
+  "limits": { "maxCharRun": 800, "maxTokenRepeat": 200 },
+  "allowedTools": ["kb_search"]
+}
+```
+
+Pass it in code, or load it from disk:
+
+```ts
+import { createAegisGuard, parsePolicy } from "gh-aegis";
+import { readFileSync } from "node:fs";
+
+const policy = parsePolicy(JSON.parse(readFileSync("aegis.policy.json", "utf8")));
+const aegis = createAegisGuard({ enabled: true, policy });
+```
+
+Explicit `AegisOptions` fields win over the policy, which wins over env vars and defaults. Detector ids:
+`prompt-injection`, `jailbreak`, `unbounded-consumption`, `data-poisoning`, `system-prompt-leak`, `pii`,
+`sensitive-disclosure`, `improper-output`, `excessive-agency`, `tool-call-oob`. A full example lives in
+[`examples/aegis.policy.json`](./examples/aegis.policy.json). The CLI and every adapter honor it:
+
+```bash
+npx gh-aegis scan app.log --policy aegis.policy.json
+```
+
+```ts
+app.use(aegisExpress({ scope: "input", policy }));   // adapters take a `policy` too
+```
+
 ## Error contract — fail closed
 
 `scan()` and `inspect()` **never throw.** Any internal error returns `{ safe: false, score: 100 }`,
@@ -251,7 +294,7 @@ Use gh-aegis as a deterministic first line of defense and layer it with:
 npm install
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm test            # vitest run (210 tests)
+npm test            # vitest run (249 tests)
 npm run bench       # benchmark + threshold gate
 npm run build       # emit dist/ (ESM + .d.ts)
 npm pack --dry-run  # inspect the publish tarball

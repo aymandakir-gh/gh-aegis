@@ -1,4 +1,4 @@
-# STATUS — gh-aegis: v0.6.0 ✅ shipped, driving to v1.0.0
+# STATUS — gh-aegis: v0.7.0 ✅ shipped, driving to v1.0.0
 
 Extending the shipped v0.4.0 zero-ML OWASP-LLM guard to a 1.0 release. Plan + decisions in
 [PRD.md](./PRD.md); architecture in [PLAN.md](./PLAN.md). Strictly **zero-ML, zero runtime deps,
@@ -10,8 +10,8 @@ deterministic, offline**; extend, never rebuild.
 |-----|-------|-------|
 | **v0.5.0** | LLM05 + LLM07 + LLM04 detectors → **8 OWASP families**, orchestrator + inspect wiring, dataset re-label, re-baselined bench | ✅ shipped |
 | **v0.6.0** | Benchmark grown to **466 samples** (evasion tier), per-category metrics, CI gate proven both directions | ✅ shipped |
-| v0.7.0 | Declarative policy/config (load + validate + test; CLI + adapters honor) | ⏳ next |
-| v0.8.0 | Latency bench + CI perf gate (p95 < budget) | ⏳ |
+| **v0.7.0** | Declarative policy/config — zero-dep validator, CLI `--policy`, adapters honor it | ✅ shipped |
+| v0.8.0 | Latency bench + CI perf gate (p95 < budget) | ⏳ next |
 | v0.9.0 | LangChain guard + streaming guard + local playground | ⏳ |
 | v1.0.0 | Docs, multi-agent adversarial review + fixes + regression tests, ≥230 tests, pack audit | ⏳ |
 
@@ -63,10 +63,24 @@ encoding, homoglyph, uncommon vector). Zero caught-malicious missed; zero benign
   per-category precision (purity).
 - `bench/thresholds.json` recomputed conservatively below the 466-sample baseline.
 
+## v0.7.0 — what shipped
+
+- **Declarative policy** (`src/policy.ts`): a JSON policy toggles detectors on/off, restricts scopes,
+  raises per-detector score thresholds (`minScore`), toggles redaction, and sets LLM10 limits +
+  tool allowlist. Validated by a **hand-rolled zero-dep validator** (`validatePolicy`/`parsePolicy`)
+  that rejects unknown keys/bad values loudly. `resolvePolicy` builds a fast runtime.
+- **Orchestrator is policy-aware**: a lazy `firstHit` pipeline skips disabled detectors, applies
+  `minScore`, short-circuits disabled scopes, and respects `redaction` for the `sanitized` copy.
+  Default policy = identical behavior to v0.6.0 (all 210 prior tests still green).
+- **CLI `--policy <file>` / `--policy=<file>`** loads + validates a policy (exit 2 on bad/missing).
+- **Adapters honor it**: `policy` flows through `AegisOptions`; Express + Fastify tests prove it.
+- Example: [`examples/aegis.policy.json`](./examples/aegis.policy.json) (excluded from the npm pack).
+
 ## Verification (local, all green)
 
-- `typecheck` / `lint` clean · `vitest` **210 passed** · `bench` gate **exit 0** · `build` emits dist.
-- `npm pack` @ 0.6.0: dist + bin + README + LICENSE + package.json only; **no** datasets/scripts/tests/bench.
+- `typecheck` / `lint` clean · `vitest` **249 passed** · `bench` gate **exit 0** · `build` emits dist.
+- `npm pack` @ 0.7.0: dist + bin + README + LICENSE + package.json only; **no**
+  datasets/scripts/tests/bench/examples.
 
 ## Decisions / log
 

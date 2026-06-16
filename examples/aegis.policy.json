@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "enabled": true,
+  "verbose": false,
+  "scopes": {
+    "input": true,
+    "output": true,
+    "tool": true
+  },
+  "detectors": {
+    "prompt-injection": true,
+    "jailbreak": true,
+    "unbounded-consumption": true,
+    "data-poisoning": true,
+    "system-prompt-leak": true,
+    "pii": { "enabled": true, "minScore": 75 },
+    "sensitive-disclosure": true,
+    "improper-output": true,
+    "excessive-agency": true,
+    "tool-call-oob": true
+  },
+  "redaction": true,
+  "limits": {
+    "maxInputLength": 8192,
+    "maxLength": 20000,
+    "maxCharRun": 800,
+    "maxTokenRepeat": 200
+  },
+  "allowedTools": ["kb_search", "github_get_file"]
+}

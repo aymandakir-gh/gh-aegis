@@ -1,3 +1,5 @@
+import type { AegisPolicy } from "./policy.js";
+
 /**
  * Aegis — Type definitions
  * OWASP LLM Top 10 reference (8 families covered):
@@ -216,4 +218,12 @@ export interface AegisOptions {
    * Reads AEGIS_MAX_TOKEN_REPEAT env var. Default: 200.
    */
   maxTokenRepeat?: number;
+
+  /**
+   * Declarative policy: which detectors run, which scopes are active, per-detector
+   * score thresholds, and redaction on/off. Explicit AegisOptions fields take
+   * precedence over the policy; the policy takes precedence over env/defaults.
+   * Load one from disk with `parsePolicy(JSON.parse(...))`.
+   */
+  policy?: AegisPolicy;
 }

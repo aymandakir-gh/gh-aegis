@@ -4,6 +4,9 @@
  * (first finding wins). `inspect()` runs every detector for the CLI.
  * Never throws: all internal errors produce safe=false, score=100 (fail-closed).
  *
+ * Policy-aware: a resolved AegisPolicy decides which detectors run, which scopes
+ * are active, per-detector score thresholds, and whether output is redacted.
+ *
  * OWASP coverage: LLM01, LLM02, LLM04, LLM05, LLM06, LLM07, LLM08, LLM10.
  */
 import type {
@@ -15,6 +18,11 @@ import type {
   ScanResult,
 } from "./types.js";
 import { OWASP_LLM, ThreatType } from "./types.js";
+import {
+  resolvePolicy,
+  type DetectorId,
+  type ResolvedPolicy,
+} from "./policy.js";
 import { scanPromptInjection } from "./guards/prompt-injection.js";
 import { scanJailbreak } from "./guards/jailbreak.js";
 import { scanPiiOutput, PII_PATTERNS } from "./guards/pii-output.js";
@@ -27,10 +35,7 @@ import {
   SYSTEM_PROMPT_LEAK_PATTERNS,
 } from "./guards/system-prompt-leak.js";
 import { scanImproperOutput } from "./guards/improper-output.js";
-import {
-  scanDataPoisoning,
-  stripInvisible,
-} from "./guards/data-poisoning.js";
+import { scanDataPoisoning, stripInvisible } from "./guards/data-poisoning.js";
 import { scanExcessiveAgency } from "./guards/excessive-agency.js";
 import {
   scanUnboundedConsumption,
@@ -75,35 +80,62 @@ function toFinding(r: ScanResult): Finding {
   };
 }
 
+/** A lazily-evaluated detector entry in a scope pipeline. */
+type Entry = [id: DetectorId, run: () => ScanResult];
+
 class DefaultAegisGuard implements AegisGuard {
   private readonly enabled: boolean;
   private readonly verbose: boolean;
   private readonly maxInputLength: number;
   private readonly defaultAllowedTools: string[];
   private readonly consumptionLimits: ConsumptionLimits;
+  private readonly policy: ResolvedPolicy;
 
   constructor(options: AegisOptions = {}) {
-    this.enabled = options.enabled ?? process.env["AEGIS_ENABLED"] === "true";
-    this.verbose = options.verbose ?? process.env["AEGIS_VERBOSE"] === "true";
+    const p = options.policy;
+    this.policy = resolvePolicy(p);
+    // Precedence: explicit option > policy > env > default.
+    this.enabled =
+      options.enabled ?? p?.enabled ?? process.env["AEGIS_ENABLED"] === "true";
+    this.verbose =
+      options.verbose ?? p?.verbose ?? process.env["AEGIS_VERBOSE"] === "true";
     this.maxInputLength =
       options.maxInputLength ??
+      p?.limits?.maxInputLength ??
       Number(process.env["AEGIS_MAX_INPUT"] ?? "8192");
     this.defaultAllowedTools =
       options.allowedTools ??
+      p?.allowedTools ??
       (process.env["ALLOWED_TOOLS"]
         ?.split(",")
         .map((t) => t.trim())
         .filter(Boolean) ?? []);
     this.consumptionLimits = {
       maxLength:
-        options.maxLength ?? Number(process.env["AEGIS_MAX_LENGTH"] ?? "20000"),
+        options.maxLength ??
+        p?.limits?.maxLength ??
+        Number(process.env["AEGIS_MAX_LENGTH"] ?? "20000"),
       maxCharRun:
         options.maxCharRun ??
+        p?.limits?.maxCharRun ??
         Number(process.env["AEGIS_MAX_CHAR_RUN"] ?? "800"),
       maxTokenRepeat:
         options.maxTokenRepeat ??
+        p?.limits?.maxTokenRepeat ??
         Number(process.env["AEGIS_MAX_TOKEN_REPEAT"] ?? "200"),
     };
+  }
+
+  /** Run a pipeline of detectors, honoring policy (enabled + minScore). First hit wins. */
+  private firstHit(entries: Entry[]): ScanResult | undefined {
+    for (const [id, run] of entries) {
+      if (!this.policy.detectorEnabled(id)) continue;
+      const r = run();
+      if (r.safe) continue;
+      if (r.score < this.policy.detectorMinScore(id)) continue; // below policy threshold
+      return r;
+    }
+    return undefined;
   }
 
   async scan(input: string, context?: ScanContext): Promise<ScanResult> {
@@ -113,41 +145,49 @@ class DefaultAegisGuard implements AegisGuard {
     }
 
     try {
-      // Truncate oversized input before regex evaluation
+      const scope = context?.scope ?? "input";
+
+      // A scope switched off by policy passes everything through.
+      if (!this.policy.scopeActive(scope)) {
+        return scope === "output"
+          ? { safe: true, score: 0, sanitized: input }
+          : { safe: true, score: 0 };
+      }
+
+      // Truncate oversized input before regex evaluation.
       const text =
         input.length > this.maxInputLength
           ? input.slice(0, this.maxInputLength)
           : input;
 
-      const scope = context?.scope ?? "input";
       let result: ScanResult;
 
       switch (scope) {
         case "tool": {
-          // Merge instance-level allowedTools as fallback
           const effectiveContext: ScanContext = {
             ...context,
             allowedTools: context?.allowedTools ?? this.defaultAllowedTools,
           };
-          const oob = scanToolCallOob(text, effectiveContext);
-          result = oob.safe ? scanExcessiveAgency(text, effectiveContext) : oob;
+          result =
+            this.firstHit([
+              ["tool-call-oob", () => scanToolCallOob(text, effectiveContext)],
+              ["excessive-agency", () => scanExcessiveAgency(text, effectiveContext)],
+            ]) ?? { safe: true, score: 0 };
           break;
         }
 
         case "output": {
           // pii(LLM02) → system-prompt-leak(LLM07) → sensitive-disclosure(LLM06)
           // → improper-output(LLM05) → excessive-agency(LLM08) → poisoning(LLM04).
-          // `sanitized` is ALWAYS present for output scope (safe copy of the text).
-          const sanitized = sanitizeOutput(text);
-          const ordered: ScanResult[] = [
-            scanPiiOutput(text, context),
-            scanSystemPromptLeak(text, context),
-            scanSensitiveDisclosure(text, context),
-            scanImproperOutput(text, context),
-            scanExcessiveAgency(text, context),
-            scanDataPoisoning(text, context),
-          ];
-          const hit = ordered.find((r) => !r.safe);
+          const sanitized = this.policy.redaction ? sanitizeOutput(text) : text;
+          const hit = this.firstHit([
+            ["pii", () => scanPiiOutput(text, context)],
+            ["system-prompt-leak", () => scanSystemPromptLeak(text, context)],
+            ["sensitive-disclosure", () => scanSensitiveDisclosure(text, context)],
+            ["improper-output", () => scanImproperOutput(text, context)],
+            ["excessive-agency", () => scanExcessiveAgency(text, context)],
+            ["data-poisoning", () => scanDataPoisoning(text, context)],
+          ]);
           result = hit
             ? { ...hit, sanitized }
             : { safe: true, score: 0, sanitized };
@@ -156,24 +196,17 @@ class DefaultAegisGuard implements AegisGuard {
 
         case "input":
         default: {
-          // Unbounded consumption (LLM10) examines RAW input (pre-truncation).
-          const consumption = scanUnboundedConsumption(
-            input,
-            this.consumptionLimits,
-          );
-          if (!consumption.safe) {
-            result = consumption;
-            break;
-          }
-          // injection(LLM01) → jailbreak(LLM01) → system-prompt-extraction(LLM07)
-          // → poisoning(LLM04). First finding wins.
-          const ordered: ScanResult[] = [
-            scanPromptInjection(text, context),
-            scanJailbreak(text, context),
-            scanSystemPromptLeak(text, context),
-            scanDataPoisoning(text, context),
-          ];
-          result = ordered.find((r) => !r.safe) ?? { safe: true, score: 0 };
+          // Unbounded consumption (LLM10) examines RAW input (pre-truncation);
+          // the rest run on the truncated text. injection(LLM01) → jailbreak(LLM01)
+          // → system-prompt-extraction(LLM07) → poisoning(LLM04). First hit wins.
+          result =
+            this.firstHit([
+              ["unbounded-consumption", () => scanUnboundedConsumption(input, this.consumptionLimits)],
+              ["prompt-injection", () => scanPromptInjection(text, context)],
+              ["jailbreak", () => scanJailbreak(text, context)],
+              ["system-prompt-leak", () => scanSystemPromptLeak(text, context)],
+              ["data-poisoning", () => scanDataPoisoning(text, context)],
+            ]) ?? { safe: true, score: 0 };
           break;
         }
       }
@@ -211,25 +244,27 @@ class DefaultAegisGuard implements AegisGuard {
           ? input.slice(0, this.maxInputLength)
           : input;
 
-      const results: ScanResult[] = [
-        scanUnboundedConsumption(input, this.consumptionLimits),
-        scanPromptInjection(text),
-        scanJailbreak(text),
-        scanSystemPromptLeak(text),
-        scanDataPoisoning(text),
-        scanPiiOutput(text),
-        scanSensitiveDisclosure(text),
-        scanImproperOutput(text),
-        scanExcessiveAgency(text),
+      // Every detector entry, gated by policy (enabled + minScore).
+      const entries: Entry[] = [
+        ["unbounded-consumption", () => scanUnboundedConsumption(input, this.consumptionLimits)],
+        ["prompt-injection", () => scanPromptInjection(text)],
+        ["jailbreak", () => scanJailbreak(text)],
+        ["system-prompt-leak", () => scanSystemPromptLeak(text)],
+        ["data-poisoning", () => scanDataPoisoning(text)],
+        ["pii", () => scanPiiOutput(text)],
+        ["sensitive-disclosure", () => scanSensitiveDisclosure(text)],
+        ["improper-output", () => scanImproperOutput(text)],
+        ["excessive-agency", () => scanExcessiveAgency(text)],
       ];
 
-      const findings: Finding[] = results
-        .filter((r) => !r.safe)
-        .map(toFinding)
+      const findings: Finding[] = entries
+        .filter(([id]) => this.policy.detectorEnabled(id))
+        .map(([id, run]) => [id, run()] as const)
+        .filter(([id, r]) => !r.safe && r.score >= this.policy.detectorMinScore(id))
+        .map(([, r]) => toFinding(r))
         .sort((a, b) => b.score - a.score);
 
-      // Safe copy: strip invisible smuggling chars, then redact PII/secrets/leaks.
-      const sanitized = sanitizeOutput(text);
+      const sanitized = this.policy.redaction ? sanitizeOutput(text) : text;
 
       return { safe: findings.length === 0, findings, sanitized };
     } catch {

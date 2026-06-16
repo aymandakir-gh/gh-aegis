@@ -25,3 +25,16 @@ export type {
   Finding,
   InspectReport,
 } from "./types.js";
+export {
+  validatePolicy,
+  parsePolicy,
+  resolvePolicy,
+  DETECTOR_IDS,
+} from "./policy.js";
+export type {
+  AegisPolicy,
+  DetectorPolicy,
+  DetectorId,
+  ValidationResult,
+  ResolvedPolicy,
+} from "./policy.js";
