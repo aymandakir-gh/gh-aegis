@@ -43,9 +43,14 @@ const JAILBREAK_PATTERNS: JailbreakPattern[] = [
     label: "pretend-no-restrictions",
   },
   {
-    pattern: /roleplay\s+as\s+(an?\s+)?(AI|bot|assistant)\s+(with\s+no|without)\s+(restrictions?|limits?|filters?|safety)/i,
+    pattern: /roleplay\s+as\s+(?:an?\s+)?(?:AI|bot|assistant)\s+(?:with\s+no|without)\s+(?:any\s+)?(?:restrictions?|limits?|filters?|safety|guidelines?)/i,
     score: 88,
     label: "roleplay-unrestricted",
+  },
+  {
+    pattern: /\b(?:set\s+aside|disable|turn\s+off|drop|remove|lift|disregard|circumvent)\s+(?:your\s+|all\s+|the\s+|any\s+)?(?:guardrails?|safeguards?|safety(?:\s+(?:filters?|measures?|guidelines?|rules?))?|restrictions?|guidelines?|content\s+filters?|filters?)\b/i,
+    score: 88,
+    label: "disable-guardrails",
   },
   {
     pattern: /developer\s+mode\s+(enabled|on|activated)/i,

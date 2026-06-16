@@ -26,9 +26,9 @@ export const DEFAULT_CONSUMPTION_LIMITS: ConsumptionLimits = {
   maxTokenRepeat: 200,
 };
 
-// Explicit "generate without bound" requests.
+// Explicit "generate without bound" requests (verbs include common gerunds).
 const UNBOUNDED_REQUEST =
-  /\b(?:repeat|print|output|say|generate|write|list|count)\b[^.?!]{0,60}\b(?:forever|indefinitely|infinitely|endlessly|for ?ever|without (?:stopping|end|limit|ceasing)|until (?:you run out|the end of time)|(?:\d[\d,]{3,})\s*(?:times|words|tokens|lines))\b/i;
+  /\b(?:keep|repeat|repeating|print|printing|output|outputting|say|saying|generate|generating|write|writing|list|listing|count|counting|produce|producing|loop|looping|emit|emitting|echo|echoing)\b[^.?!]{0,60}\b(?:forever|indefinitely|infinitely|endlessly|for ?ever|without (?:stopping|end|limit|ceasing)|until (?:you run out|the end of time)|(?:\d[\d,]{3,})\s*(?:times|words|tokens|lines))\b/i;
 
 /** Longest run of a single repeated character. O(n). */
 function longestCharRun(s: string): number {

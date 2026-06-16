@@ -19,9 +19,12 @@ export const PII_PATTERNS: RedactPattern[] = [
     score: 80,
     label: "email-address",
   },
-  // US/international phone numbers (3-3-4 groups, optional country code)
+  // US/international phone numbers (3-3-4 groups, optional country code).
+  // Token boundaries (no surrounding alphanumeric) prevent matching a 10-digit
+  // run embedded inside a longer secret (e.g. an API key).
   {
-    pattern: /(\+?1[\s\-.]?)?\(?\d{3}\)?[\s\-.]?\d{3}[\s\-.]?\d{4}(?!\d)/,
+    pattern:
+      /(?<![A-Za-z0-9])(?:\+?1[\s\-.]?)?\(?\d{3}\)?[\s\-.]?\d{3}[\s\-.]?\d{4}(?![A-Za-z0-9])/,
     score: 75,
     label: "phone-number",
   },

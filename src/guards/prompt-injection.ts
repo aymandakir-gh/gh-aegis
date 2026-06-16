@@ -13,17 +13,17 @@ interface InjectionPattern {
 
 const INJECTION_PATTERNS: InjectionPattern[] = [
   {
-    pattern: /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|context|directives?)/i,
+    pattern: /ignore\s+(?:all\s+|the\s+|any\s+|your\s+)?(?:previous|prior|above|earlier|preceding)\s+(instructions?|prompts?|context|directives?|rules?)/i,
     score: 95,
     label: "ignore-previous-instructions",
   },
   {
-    pattern: /disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|context)/i,
+    pattern: /disregard\s+(?:all\s+|the\s+|any\s+|your\s+)?(?:previous|prior|above|earlier|preceding)\s+(instructions?|prompts?|context|directives?|rules?)/i,
     score: 90,
     label: "disregard-instructions",
   },
   {
-    pattern: /forget\s+(all\s+)?(previous|prior|above|what\s+i\s+told\s+you)/i,
+    pattern: /forget\s+(?:all\s+|the\s+|everything\s+|any\s+)?(?:previous|prior|above|earlier|what\s+i\s+told\s+you)/i,
     score: 85,
     label: "forget-instructions",
   },
@@ -38,7 +38,7 @@ const INJECTION_PATTERNS: InjectionPattern[] = [
     label: "system-prompt-injection",
   },
   {
-    pattern: /reveal\s+(your\s+)?(system\s+prompt|instructions?|training\s+data|internal\s+prompt)/i,
+    pattern: /reveal\s+(?:your\s+|the\s+|its\s+)?(?:(?:system|internal|initial|original|hidden|secret)\s+(?:prompt|instructions?|directives?|configuration)|(?:system\s+)?prompt|training\s+data)/i,
     score: 85,
     label: "reveal-system-prompt",
   },
