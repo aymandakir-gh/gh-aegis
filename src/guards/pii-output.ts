@@ -5,6 +5,8 @@
  *
  * v0.2: adds `sanitized` to every ScanResult — each PII match is replaced
  * with `[REDACTED:<pattern-label>]` so callers can surface safe output.
+ * v0.3.1: redaction is position-based with overlap resolution (highest-score
+ * pattern wins) so a broad pattern can no longer partially clobber a secret.
  */
 import type { ScanContext, ScanResult } from "../types";
 import { ThreatType } from "../types";
@@ -67,7 +69,7 @@ const PII_PATTERNS: PiiPattern[] = [
 ];
 
 /**
- * Build a global-flag version of a regex for replace-all operations.
+ * Build a global-flag version of a regex for find-all (exec-loop) operations.
  * Preserves existing flags (e.g. 'i') and appends 'g' if missing.
  */
 function toGlobal(re: RegExp): RegExp {
@@ -75,35 +77,91 @@ function toGlobal(re: RegExp): RegExp {
   return new RegExp(re.source, flags);
 }
 
+interface PiiMatch {
+  start: number;
+  end: number;
+  label: string;
+  score: number;
+}
+
+/**
+ * Scan an LLM output string for PII and produce a redacted copy.
+ *
+ * Redaction is **position-based**, not cumulative-replace. Every pattern is
+ * matched against the *original* input, all matches are collected with their
+ * offsets, and overlaps are resolved by precedence (highest score wins, then
+ * longest, then leftmost) before a single left-to-right rebuild.
+ *
+ * This avoids a class of bugs where a broad pattern (e.g. phone) matches a digit
+ * run *inside* a higher-value secret (IBAN, API key) and a naive cumulative
+ * `String.replace` then mutates the text so the secret's own pattern no longer
+ * matches — leaving the secret only partially redacted. Under-redacting a secret
+ * is the exact LLM02 failure this guard exists to prevent.
+ */
 export function scanPiiOutput(
   input: string,
   _context?: ScanContext,
 ): ScanResult {
-  let maxScore = 0;
-  const matched: string[] = [];
-  // sanitized is built up cumulatively — each matched pattern redacts in place
-  let sanitized = input;
+  const matches: PiiMatch[] = [];
 
   for (const { pattern, score, label } of PII_PATTERNS) {
-    // Detect against original input (pattern has no 'g' flag — test() is stateless)
-    if (pattern.test(input)) {
-      matched.push(label);
-      if (score > maxScore) maxScore = score;
-      // Replace ALL occurrences in the accumulating sanitized string
-      sanitized = sanitized.replace(toGlobal(pattern), `[REDACTED:${label}]`);
+    const global = toGlobal(pattern);
+    let m: RegExpExecArray | null;
+    while ((m = global.exec(input)) !== null) {
+      // Guard against zero-length matches (none of our patterns can, but be safe).
+      if (m[0].length === 0) {
+        global.lastIndex++;
+        continue;
+      }
+      matches.push({
+        start: m.index,
+        end: m.index + m[0].length,
+        label,
+        score,
+      });
     }
   }
 
-  if (maxScore >= 75) {
-    return {
-      safe: false,
-      threatType: ThreatType.PII_OUTPUT,
-      score: maxScore,
-      details: [`PII detected in LLM output: ${matched.join(", ")}`],
-      sanitized,
-    };
+  // No PII — sanitized equals the original input unchanged.
+  if (matches.length === 0) {
+    return { safe: true, score: 0, sanitized: input };
   }
 
-  // No PII — sanitized equals the original input unchanged
-  return { safe: true, score: 0, sanitized: input };
+  // Resolve overlaps: prefer higher score, then longer span, then earlier start.
+  // Greedily accept matches that do not overlap an already-accepted one.
+  matches.sort(
+    (a, b) =>
+      b.score - a.score ||
+      b.end - b.start - (a.end - a.start) ||
+      a.start - b.start,
+  );
+  const accepted: PiiMatch[] = [];
+  for (const cand of matches) {
+    const overlaps = accepted.some(
+      (a) => cand.start < a.end && a.start < cand.end,
+    );
+    if (!overlaps) accepted.push(cand);
+  }
+
+  // Rebuild the sanitized string left-to-right from the accepted, non-overlapping spans.
+  accepted.sort((a, b) => a.start - b.start);
+  const labels: string[] = [];
+  let maxScore = 0;
+  let sanitized = "";
+  let cursor = 0;
+  for (const a of accepted) {
+    sanitized += input.slice(cursor, a.start) + `[REDACTED:${a.label}]`;
+    cursor = a.end;
+    if (!labels.includes(a.label)) labels.push(a.label);
+    if (a.score > maxScore) maxScore = a.score;
+  }
+  sanitized += input.slice(cursor);
+
+  return {
+    safe: false,
+    threatType: ThreatType.PII_OUTPUT,
+    score: maxScore,
+    details: [`PII detected in LLM output: ${labels.join(", ")}`],
+    sanitized,
+  };
 }
