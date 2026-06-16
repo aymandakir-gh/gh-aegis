@@ -50,6 +50,19 @@ const INTERNAL_ERROR_RESULT: ScanResult = {
   details: ["AegisInternalError — scan aborted, request blocked as precaution"],
 };
 
+// Browser/edge/Deno-safe access to Node globals — gh-aegis is pure regex and runs
+// anywhere, so `process` may be absent (e.g. the offline playground via file://).
+function env(key: string): string | undefined {
+  return typeof process !== "undefined" && process.env
+    ? process.env[key]
+    : undefined;
+}
+function warn(message: string): void {
+  if (typeof process !== "undefined" && process.stderr) {
+    process.stderr.write(message);
+  }
+}
+
 /**
  * Substring-redactable patterns surfaced in the `sanitized` copy. Active-content
  * threats (improper-output / excessive-agency) and invisible-char smuggling are
@@ -96,17 +109,17 @@ class DefaultAegisGuard implements AegisGuard {
     this.policy = resolvePolicy(p);
     // Precedence: explicit option > policy > env > default.
     this.enabled =
-      options.enabled ?? p?.enabled ?? process.env["AEGIS_ENABLED"] === "true";
+      options.enabled ?? p?.enabled ?? env("AEGIS_ENABLED") === "true";
     this.verbose =
-      options.verbose ?? p?.verbose ?? process.env["AEGIS_VERBOSE"] === "true";
+      options.verbose ?? p?.verbose ?? env("AEGIS_VERBOSE") === "true";
     this.maxInputLength =
       options.maxInputLength ??
       p?.limits?.maxInputLength ??
-      Number(process.env["AEGIS_MAX_INPUT"] ?? "8192");
+      Number(env("AEGIS_MAX_INPUT") ?? "8192");
     this.defaultAllowedTools =
       options.allowedTools ??
       p?.allowedTools ??
-      (process.env["ALLOWED_TOOLS"]
+      (env("ALLOWED_TOOLS")
         ?.split(",")
         .map((t) => t.trim())
         .filter(Boolean) ?? []);
@@ -114,15 +127,15 @@ class DefaultAegisGuard implements AegisGuard {
       maxLength:
         options.maxLength ??
         p?.limits?.maxLength ??
-        Number(process.env["AEGIS_MAX_LENGTH"] ?? "20000"),
+        Number(env("AEGIS_MAX_LENGTH") ?? "20000"),
       maxCharRun:
         options.maxCharRun ??
         p?.limits?.maxCharRun ??
-        Number(process.env["AEGIS_MAX_CHAR_RUN"] ?? "800"),
+        Number(env("AEGIS_MAX_CHAR_RUN") ?? "800"),
       maxTokenRepeat:
         options.maxTokenRepeat ??
         p?.limits?.maxTokenRepeat ??
-        Number(process.env["AEGIS_MAX_TOKEN_REPEAT"] ?? "200"),
+        Number(env("AEGIS_MAX_TOKEN_REPEAT") ?? "200"),
     };
   }
 
@@ -212,7 +225,7 @@ class DefaultAegisGuard implements AegisGuard {
       }
 
       if (this.verbose && !result.safe) {
-        process.stderr.write(
+        warn(
           `[Aegis] BLOCKED scope=${scope} threat=${result.threatType ?? "UNKNOWN"} ` +
             `score=${result.score} session=${context?.sessionId ?? "none"}\n`,
         );
@@ -221,9 +234,7 @@ class DefaultAegisGuard implements AegisGuard {
       return result;
     } catch {
       if (this.verbose) {
-        process.stderr.write(
-          "[Aegis] Internal error during scan — failing closed\n",
-        );
+        warn("[Aegis] Internal error during scan — failing closed\n");
       }
       return INTERNAL_ERROR_RESULT;
     }

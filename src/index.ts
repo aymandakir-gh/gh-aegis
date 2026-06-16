@@ -38,3 +38,10 @@ export type {
   ValidationResult,
   ResolvedPolicy,
 } from "./policy.js";
+export { AegisBlockedError } from "./errors.js";
+export { createStreamGuard, guardTextStream } from "./stream.js";
+export type {
+  StreamGuard,
+  StreamGuardOptions,
+  StreamGuardResult,
+} from "./stream.js";

@@ -24,4 +24,11 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "off",
     },
   },
+  {
+    // The playground runs in the browser — give it browser globals.
+    files: ["playground/**/*.js"],
+    languageOptions: {
+      globals: { ...globals.browser },
+    },
+  },
 );

@@ -1,4 +1,4 @@
-# STATUS — gh-aegis: v0.8.0 ✅ shipped, driving to v1.0.0
+# STATUS — gh-aegis: v0.9.0 ✅ shipped, driving to v1.0.0
 
 Extending the shipped v0.4.0 zero-ML OWASP-LLM guard to a 1.0 release. Plan + decisions in
 [PRD.md](./PRD.md); architecture in [PLAN.md](./PLAN.md). Strictly **zero-ML, zero runtime deps,
@@ -12,8 +12,8 @@ deterministic, offline**; extend, never rebuild.
 | **v0.6.0** | Benchmark grown to **466 samples** (evasion tier), per-category metrics, CI gate proven both directions | ✅ shipped |
 | **v0.7.0** | Declarative policy/config — zero-dep validator, CLI `--policy`, adapters honor it | ✅ shipped |
 | **v0.8.0** | Latency bench (`npm run perf`) + CI perf gate (p95 < documented budget) | ✅ shipped |
-| v0.9.0 | LangChain guard + streaming guard + local playground | ⏳ next |
-| v1.0.0 | Docs, multi-agent adversarial review + fixes + regression tests, ≥230 tests, pack audit | ⏳ |
+| **v0.9.0** | LangChain callback guard + streaming-output guard + local zero-network playground | ✅ shipped |
+| v1.0.0 | Docs, multi-agent adversarial review + fixes + regression tests, ≥230 tests, pack audit | ⏳ next |
 
 ## v0.5.0 — what shipped
 
@@ -63,6 +63,25 @@ encoding, homoglyph, uncommon vector). Zero caught-malicious missed; zero benign
   per-category precision (purity).
 - `bench/thresholds.json` recomputed conservatively below the 466-sample baseline.
 
+## v0.9.0 — what shipped
+
+- **LangChain guard** (`src/adapters/langchain.ts`, `gh-aegis/langchain`): `aegisCallbackHandler()`
+  returns a plain object structurally compatible with LangChain's `CallbackHandlerMethods` — scans
+  prompts/messages (input), generations (output), and tool inputs, throwing `AegisBlockedError`. Imports
+  **no `@langchain/*` package** (local structural types), so it builds without LangChain installed.
+- **Streaming guard** (`src/stream.ts`): `createStreamGuard()` + `guardTextStream(asyncIterable)` scan a
+  sliding window of accumulated output, catching cross-chunk attacks (`<scr`+`ipt>`); blocking is sticky;
+  `guardTextStream` throws before emitting an unsafe chunk.
+- **Browser-safe orchestrator**: `process.env`/`process.stderr` access is guarded (`typeof process`),
+  so the library runs in the browser/edge/Deno — which the playground relies on.
+- **Local zero-network playground** (`playground/index.html` + `app.js`): paste text → live detections,
+  scores, and redacted output, running the **real compiled library** in the browser, no network. Excluded
+  from the npm pack. `tests/playground.test.ts` smoke-tests wiring, the analysis contract, and (when a
+  build exists) the real `app.js` against `dist`.
+- Shared `AegisBlockedError` moved to `src/errors.ts` (re-exported from `gh-aegis/ai` for compat).
+- New subpath export `gh-aegis/langchain`; `createStreamGuard`/`guardTextStream`/`AegisBlockedError`
+  exported from the root.
+
 ## v0.8.0 — what shipped
 
 - **Latency benchmark** (`scripts/perf.ts`, `npm run perf`): measures per-detector + end-to-end
@@ -90,10 +109,12 @@ encoding, homoglyph, uncommon vector). Zero caught-malicious missed; zero benign
 
 ## Verification (local, all green)
 
-- `typecheck` / `lint` clean · `vitest` **253 passed** · `bench` gate **exit 0** · `perf` gate
-  **exit 0** · `build` emits dist.
-- `npm pack` @ 0.8.0: dist + bin + README + LICENSE + package.json only; **no**
-  datasets/scripts/tests/bench/examples.
+- `typecheck` / `lint` clean · `vitest` **276 passed** · `bench` gate **exit 0** · `perf` gate
+  **exit 0** · `build` emits dist (incl. `dist/adapters/langchain.js`, `dist/stream.js`).
+- `npm pack` @ 0.9.0: dist + bin + README + LICENSE + package.json only; **no**
+  datasets/scripts/tests/bench/examples/playground.
+- Playground verified: `app.js` runs the compiled `dist/index.js` and `analyze()` returns correct
+  findings; orchestrator confirmed free of unguarded `process` access in the browser import chain.
 
 ## Decisions / log
 

@@ -14,21 +14,12 @@
  */
 import type { LanguageModelMiddleware } from "ai";
 import { createAegisGuard } from "../aegis-guard.js";
-import type { AegisOptions, ScanResult } from "../types.js";
+import type { AegisOptions } from "../types.js";
+import { AegisBlockedError } from "../errors.js";
 
-/** Thrown when gh-aegis blocks a model input or output. */
-export class AegisBlockedError extends Error {
-  readonly phase: "input" | "output";
-  readonly result: ScanResult;
-  constructor(phase: "input" | "output", result: ScanResult) {
-    super(
-      `gh-aegis blocked model ${phase}: ${result.threatType ?? "THREAT"} (score ${result.score})`,
-    );
-    this.name = "AegisBlockedError";
-    this.phase = phase;
-    this.result = result;
-  }
-}
+// Re-exported for backward compatibility (now lives in ../errors.ts, shared with
+// the LangChain and streaming guards).
+export { AegisBlockedError };
 
 export type AegisAiOptions = AegisOptions;
 
