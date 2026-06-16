@@ -1,13 +1,32 @@
 /**
  * AegisGuard — orchestrator
- * Routes scan calls to the appropriate guard based on scope.
+ * Routes scan calls to the appropriate guard based on scope, in priority order
+ * (first finding wins). `inspect()` runs every detector for the CLI.
  * Never throws: all internal errors produce safe=false, score=100 (fail-closed).
  */
-import type { AegisGuard, AegisOptions, ScanContext, ScanResult } from "./types.js";
+import type {
+  AegisGuard,
+  AegisOptions,
+  Finding,
+  InspectReport,
+  ScanContext,
+  ScanResult,
+} from "./types.js";
+import { OWASP_LLM, ThreatType } from "./types.js";
 import { scanPromptInjection } from "./guards/prompt-injection.js";
 import { scanJailbreak } from "./guards/jailbreak.js";
-import { scanPiiOutput } from "./guards/pii-output.js";
+import { scanPiiOutput, PII_PATTERNS } from "./guards/pii-output.js";
+import {
+  scanSensitiveDisclosure,
+  DISCLOSURE_PATTERNS,
+} from "./guards/sensitive-disclosure.js";
+import { scanExcessiveAgency } from "./guards/excessive-agency.js";
+import {
+  scanUnboundedConsumption,
+  type ConsumptionLimits,
+} from "./guards/unbounded-consumption.js";
 import { scanToolCallOob } from "./guards/tool-call-oob.js";
+import { redact } from "./guards/redact.js";
 
 const INTERNAL_ERROR_RESULT: ScanResult = {
   safe: false,
@@ -15,17 +34,29 @@ const INTERNAL_ERROR_RESULT: ScanResult = {
   details: ["AegisInternalError — scan aborted, request blocked as precaution"],
 };
 
+/** Convert an unsafe ScanResult into an OWASP-annotated Finding. */
+function toFinding(r: ScanResult): Finding {
+  const threatType = r.threatType ?? ThreatType.PROMPT_INJECTION;
+  const meta = OWASP_LLM[threatType];
+  return {
+    threatType,
+    owaspId: meta.id,
+    owaspName: meta.name,
+    score: r.score,
+    detail: r.details?.[0] ?? meta.name,
+  };
+}
+
 class DefaultAegisGuard implements AegisGuard {
   private readonly enabled: boolean;
   private readonly verbose: boolean;
   private readonly maxInputLength: number;
   private readonly defaultAllowedTools: string[];
+  private readonly consumptionLimits: ConsumptionLimits;
 
   constructor(options: AegisOptions = {}) {
-    this.enabled =
-      options.enabled ?? process.env["AEGIS_ENABLED"] === "true";
-    this.verbose =
-      options.verbose ?? process.env["AEGIS_VERBOSE"] === "true";
+    this.enabled = options.enabled ?? process.env["AEGIS_ENABLED"] === "true";
+    this.verbose = options.verbose ?? process.env["AEGIS_VERBOSE"] === "true";
     this.maxInputLength =
       options.maxInputLength ??
       Number(process.env["AEGIS_MAX_INPUT"] ?? "8192");
@@ -35,6 +66,16 @@ class DefaultAegisGuard implements AegisGuard {
         ?.split(",")
         .map((t) => t.trim())
         .filter(Boolean) ?? []);
+    this.consumptionLimits = {
+      maxLength:
+        options.maxLength ?? Number(process.env["AEGIS_MAX_LENGTH"] ?? "20000"),
+      maxCharRun:
+        options.maxCharRun ??
+        Number(process.env["AEGIS_MAX_CHAR_RUN"] ?? "800"),
+      maxTokenRepeat:
+        options.maxTokenRepeat ??
+        Number(process.env["AEGIS_MAX_TOKEN_REPEAT"] ?? "200"),
+    };
   }
 
   async scan(input: string, context?: ScanContext): Promise<ScanResult> {
@@ -44,7 +85,7 @@ class DefaultAegisGuard implements AegisGuard {
     }
 
     try {
-      // Truncate oversized input before evaluation
+      // Truncate oversized input before regex evaluation
       const text =
         input.length > this.maxInputLength
           ? input.slice(0, this.maxInputLength)
@@ -58,21 +99,45 @@ class DefaultAegisGuard implements AegisGuard {
           // Merge instance-level allowedTools as fallback
           const effectiveContext: ScanContext = {
             ...context,
-            allowedTools:
-              context?.allowedTools ?? this.defaultAllowedTools,
+            allowedTools: context?.allowedTools ?? this.defaultAllowedTools,
           };
-          result = scanToolCallOob(text, effectiveContext);
+          const oob = scanToolCallOob(text, effectiveContext);
+          result = oob.safe ? scanExcessiveAgency(text, effectiveContext) : oob;
           break;
         }
 
         case "output": {
-          result = scanPiiOutput(text, context);
+          // PII (LLM02) → sensitive disclosure (LLM06) → excessive agency (LLM08).
+          // `sanitized` is always present for output scope.
+          const pii = scanPiiOutput(text, context);
+          if (!pii.safe) {
+            result = pii;
+            break;
+          }
+          const disclosure = scanSensitiveDisclosure(text, context);
+          if (!disclosure.safe) {
+            result = disclosure;
+            break;
+          }
+          const agency = scanExcessiveAgency(text, context);
+          result = agency.safe
+            ? { safe: true, score: 0, sanitized: pii.sanitized }
+            : { ...agency, sanitized: pii.sanitized };
           break;
         }
 
         case "input":
         default: {
-          // Run injection first; if clean, check jailbreak
+          // Unbounded consumption (LLM10) examines RAW input (pre-truncation).
+          const consumption = scanUnboundedConsumption(
+            input,
+            this.consumptionLimits,
+          );
+          if (!consumption.safe) {
+            result = consumption;
+            break;
+          }
+          // Injection first; if clean, jailbreak.
           const injResult = scanPromptInjection(text, context);
           result = injResult.safe ? scanJailbreak(text, context) : injResult;
           break;
@@ -94,6 +159,59 @@ class DefaultAegisGuard implements AegisGuard {
         );
       }
       return INTERNAL_ERROR_RESULT;
+    }
+  }
+
+  async inspect(
+    input: string,
+    _context?: ScanContext,
+  ): Promise<InspectReport> {
+    // Disabled → no findings (consistent with scan()).
+    if (!this.enabled) {
+      return { safe: true, findings: [], sanitized: input };
+    }
+
+    try {
+      const text =
+        input.length > this.maxInputLength
+          ? input.slice(0, this.maxInputLength)
+          : input;
+
+      const results: ScanResult[] = [
+        scanUnboundedConsumption(input, this.consumptionLimits),
+        scanPromptInjection(text),
+        scanJailbreak(text),
+        scanPiiOutput(text),
+        scanSensitiveDisclosure(text),
+        scanExcessiveAgency(text),
+      ];
+
+      const findings: Finding[] = results
+        .filter((r) => !r.safe)
+        .map(toFinding)
+        .sort((a, b) => b.score - a.score);
+
+      // Merged redaction of every PII + sensitive-disclosure match.
+      const { sanitized } = redact(text, [
+        ...PII_PATTERNS,
+        ...DISCLOSURE_PATTERNS,
+      ]);
+
+      return { safe: findings.length === 0, findings, sanitized };
+    } catch {
+      return {
+        safe: false,
+        findings: [
+          {
+            threatType: ThreatType.PROMPT_INJECTION,
+            owaspId: "AEGIS",
+            owaspName: "Internal error (failed closed)",
+            score: 100,
+            detail: "AegisInternalError — inspection aborted",
+          },
+        ],
+        sanitized: input,
+      };
     }
   }
 }

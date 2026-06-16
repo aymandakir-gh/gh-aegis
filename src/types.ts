@@ -1,7 +1,9 @@
 /**
- * Aegis v0.2 — Type definitions
- * OWASP LLM Top 10 reference: LLM01 (Prompt Injection), LLM02 (Insecure Output),
- * LLM08 (Excessive Agency)
+ * Aegis — Type definitions
+ * OWASP LLM Top 10 reference:
+ *   LLM01 (Prompt Injection), LLM02 (Insecure Output / PII),
+ *   LLM06 (Sensitive Information Disclosure), LLM08 (Excessive Agency),
+ *   LLM10 (Unbounded Consumption).
  */
 
 // ─── Threat Type Enum ─────────────────────────────────────────────────────────
@@ -16,9 +18,35 @@ export enum ThreatType {
   /** LLM02 — LLM output contains PII (email, phone, IBAN, API key) */
   PII_OUTPUT = "PII_OUTPUT",
 
+  /** LLM06 — Output leaks secrets, credentials, private keys, or the system prompt */
+  SENSITIVE_DISCLOSURE = "SENSITIVE_DISCLOSURE",
+
   /** LLM08 — Tool call targets a resource outside the session allowlist */
   TOOL_CALL_OOB = "TOOL_CALL_OOB",
+
+  /** LLM08 — Dangerous shell/SQL/code-exec/URL action (agent over-reach) */
+  EXCESSIVE_AGENCY = "EXCESSIVE_AGENCY",
+
+  /** LLM10 — Input is oversized, highly repetitive, or requests unbounded generation */
+  UNBOUNDED_CONSUMPTION = "UNBOUNDED_CONSUMPTION",
 }
+
+/** Maps a ThreatType to its OWASP LLM Top 10 entry (id + human name). */
+export const OWASP_LLM: Record<ThreatType, { id: string; name: string }> = {
+  [ThreatType.PROMPT_INJECTION]: { id: "LLM01", name: "Prompt Injection" },
+  [ThreatType.JAILBREAK]: { id: "LLM01", name: "Prompt Injection (Jailbreak)" },
+  [ThreatType.PII_OUTPUT]: { id: "LLM02", name: "Insecure Output / PII" },
+  [ThreatType.SENSITIVE_DISCLOSURE]: {
+    id: "LLM06",
+    name: "Sensitive Information Disclosure",
+  },
+  [ThreatType.TOOL_CALL_OOB]: { id: "LLM08", name: "Excessive Agency (tool OOB)" },
+  [ThreatType.EXCESSIVE_AGENCY]: { id: "LLM08", name: "Excessive Agency" },
+  [ThreatType.UNBOUNDED_CONSUMPTION]: {
+    id: "LLM10",
+    name: "Unbounded Consumption",
+  },
+};
 
 // ─── Scan Context ─────────────────────────────────────────────────────────────
 
@@ -69,15 +97,40 @@ export interface ScanResult {
   details?: string[];
 
   /**
-   * v0.2 — PII-sanitized version of the scanned string.
-   * Only populated when scope = "output".
-   * - PII detected: each match replaced with [REDACTED:<pattern-label>]
-   * - No PII detected: equals the original (truncated) input unchanged
+   * Sanitized version of the scanned string.
+   * Populated for scope = "output" (PII and sensitive-disclosure redaction).
+   * - Match detected: each match replaced with [REDACTED:<pattern-label>]
+   * - No match detected: equals the original (truncated) input unchanged
    * - scope = "input" | "tool": field is absent (undefined)
    *
    * Safe to surface to end-users; original input must remain internal.
    */
   sanitized?: string;
+}
+
+// ─── Comprehensive inspection (CLI / multi-detector) ──────────────────────────
+
+/** A single detector hit, annotated with its OWASP LLM Top 10 entry. */
+export interface Finding {
+  threatType: ThreatType;
+  /** OWASP id, e.g. "LLM01". */
+  owaspId: string;
+  /** OWASP name, e.g. "Prompt Injection". */
+  owaspName: string;
+  /** Risk score 0–100. */
+  score: number;
+  /** Human-readable explanation (which rule fired). */
+  detail: string;
+}
+
+/** Result of running every detector over one string. */
+export interface InspectReport {
+  /** true = no findings. */
+  safe: boolean;
+  /** Every detector hit, highest score first. */
+  findings: Finding[];
+  /** Input with all detected PII/secrets redacted. */
+  sanitized: string;
 }
 
 // ─── Main Interface ───────────────────────────────────────────────────────────
@@ -88,6 +141,12 @@ export interface AegisGuard {
    * Never throws — errors produce { safe: false, score: 100 }.
    */
   scan(input: string, context?: ScanContext): Promise<ScanResult>;
+
+  /**
+   * Run EVERY detector over `input` and return all findings (no scope routing).
+   * Used by the CLI to scan free text/logs. Never throws.
+   */
+  inspect(input: string, context?: ScanContext): Promise<InspectReport>;
 }
 
 // ─── Factory Options ─────────────────────────────────────────────────────────
@@ -116,4 +175,23 @@ export interface AegisOptions {
    * Reads ALLOWED_TOOLS env var (comma-separated).
    */
   allowedTools?: string[];
+
+  /**
+   * LLM10 — max raw input length (chars) before flagging unbounded consumption.
+   * Evaluated against the original input, before maxInputLength truncation.
+   * Reads AEGIS_MAX_LENGTH env var. Default: 20000.
+   */
+  maxLength?: number;
+
+  /**
+   * LLM10 — max run of a single repeated character before flagging.
+   * Reads AEGIS_MAX_CHAR_RUN env var. Default: 800.
+   */
+  maxCharRun?: number;
+
+  /**
+   * LLM10 — max number of repeats of any single whitespace-delimited token.
+   * Reads AEGIS_MAX_TOKEN_REPEAT env var. Default: 200.
+   */
+  maxTokenRepeat?: number;
 }

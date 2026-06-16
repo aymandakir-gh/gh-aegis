@@ -10,14 +10,9 @@
  */
 import type { ScanContext, ScanResult } from "../types.js";
 import { ThreatType } from "../types.js";
+import { redact, type RedactPattern } from "./redact.js";
 
-interface PiiPattern {
-  pattern: RegExp;
-  score: number;
-  label: string;
-}
-
-const PII_PATTERNS: PiiPattern[] = [
+export const PII_PATTERNS: RedactPattern[] = [
   // Email addresses
   {
     pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/,
@@ -69,93 +64,19 @@ const PII_PATTERNS: PiiPattern[] = [
 ];
 
 /**
- * Build a global-flag version of a regex for find-all (exec-loop) operations.
- * Preserves existing flags (e.g. 'i') and appends 'g' if missing.
- */
-function toGlobal(re: RegExp): RegExp {
-  const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
-  return new RegExp(re.source, flags);
-}
-
-interface PiiMatch {
-  start: number;
-  end: number;
-  label: string;
-  score: number;
-}
-
-/**
  * Scan an LLM output string for PII and produce a redacted copy.
- *
- * Redaction is **position-based**, not cumulative-replace. Every pattern is
- * matched against the *original* input, all matches are collected with their
- * offsets, and overlaps are resolved by precedence (highest score wins, then
- * longest, then leftmost) before a single left-to-right rebuild.
- *
- * This avoids a class of bugs where a broad pattern (e.g. phone) matches a digit
- * run *inside* a higher-value secret (IBAN, API key) and a naive cumulative
- * `String.replace` then mutates the text so the secret's own pattern no longer
- * matches — leaving the secret only partially redacted. Under-redacting a secret
- * is the exact LLM02 failure this guard exists to prevent.
+ * Redaction is position-based with overlap resolution (see ./redact.ts).
  */
 export function scanPiiOutput(
   input: string,
   _context?: ScanContext,
 ): ScanResult {
-  const matches: PiiMatch[] = [];
-
-  for (const { pattern, score, label } of PII_PATTERNS) {
-    const global = toGlobal(pattern);
-    let m: RegExpExecArray | null;
-    while ((m = global.exec(input)) !== null) {
-      // Guard against zero-length matches (none of our patterns can, but be safe).
-      if (m[0].length === 0) {
-        global.lastIndex++;
-        continue;
-      }
-      matches.push({
-        start: m.index,
-        end: m.index + m[0].length,
-        label,
-        score,
-      });
-    }
-  }
+  const { labels, maxScore, sanitized, count } = redact(input, PII_PATTERNS);
 
   // No PII — sanitized equals the original input unchanged.
-  if (matches.length === 0) {
+  if (count === 0) {
     return { safe: true, score: 0, sanitized: input };
   }
-
-  // Resolve overlaps: prefer higher score, then longer span, then earlier start.
-  // Greedily accept matches that do not overlap an already-accepted one.
-  matches.sort(
-    (a, b) =>
-      b.score - a.score ||
-      b.end - b.start - (a.end - a.start) ||
-      a.start - b.start,
-  );
-  const accepted: PiiMatch[] = [];
-  for (const cand of matches) {
-    const overlaps = accepted.some(
-      (a) => cand.start < a.end && a.start < cand.end,
-    );
-    if (!overlaps) accepted.push(cand);
-  }
-
-  // Rebuild the sanitized string left-to-right from the accepted, non-overlapping spans.
-  accepted.sort((a, b) => a.start - b.start);
-  const labels: string[] = [];
-  let maxScore = 0;
-  let sanitized = "";
-  let cursor = 0;
-  for (const a of accepted) {
-    sanitized += input.slice(cursor, a.start) + `[REDACTED:${a.label}]`;
-    cursor = a.end;
-    if (!labels.includes(a.label)) labels.push(a.label);
-    if (a.score > maxScore) maxScore = a.score;
-  }
-  sanitized += input.slice(cursor);
 
   return {
     safe: false,

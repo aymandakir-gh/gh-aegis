@@ -1,49 +1,62 @@
-# PLAN — ship gh-aegis v0.3.1
+# PLAN — gh-aegis v0.4.0
 
-Gap analysis (current `main` vs. goal) and the slice-by-slice plan to close it.
-Target tag: **v0.3.1**. Owner: autonomous run. Last updated as work proceeds — see STATUS.md for live state.
+Level up from a shipped utility (v0.3.1) to a best-in-class **deterministic, zero-ML** LLM-security
+guard. No model downloads, no inference, no runtime network — speed + auditability is the whole
+differentiator. Target tag: **v0.4.0**. Live state in STATUS.md.
 
-## Where the code actually is
+## Starting point (v0.3.1)
 
-- `src/` implements **v0.3**: 4 guards (prompt-injection LLM01, jailbreak LLM01,
-  PII-output LLM02 with `sanitized` redaction, tool-call-OOB LLM08), an orchestrator
-  (`createAegisGuard`), fail-closed error contract, `AEGIS_ENABLED` env activation.
-- `package.json` is `0.3.0` but has **no build/publish metadata** (no `main`/`types`/
-  `exports`/`files`, `build` is just `tsc --noEmit`).
-- 4 test files in `tests/` (61 tests). **2 fail on `main`** — a real redaction bug.
-- Branch `origin/w6/tests-20260610-1903` (PR #1) adds `src/guards/pii-output.test.ts`
-  (19 tests). PR #1 is the only open issue/PR.
+- `scan(text, {scope})` routes by scope: `input` → injection→jailbreak (LLM01),
+  `output` → PII+redaction (LLM02), `tool` → allowlist OOB (LLM08).
+- Position-based PII redaction; fail-closed; `AEGIS_ENABLED` gate; ESM build; 80 tests; CI green.
 
-## Gaps vs. goal
+## OWASP LLM Top 10 coverage (v0.4.0)
 
-| # | Gap | Action |
-|---|-----|--------|
-| 1 | README claims v0.1 / private / not-on-npm; imports from `./src`; lists shipped v0.2/v0.3 as future | Rewrite README to reality + badges + security section |
-| 2 | PR #1 / `w6/tests` branch unmerged | Merge (`--no-ff`, `Closes #1`), delete branch |
-| 3 | Open issue (PR #1) unresolved | Closed by the referencing merge commit |
-| 4 | **2 failing tests** — PII redaction interference bug | Fix `pii-output.ts` (overlap-resolving redaction) |
-| 5 | Not publish-ready | name/version, `main`/`types`/`exports`, `files`, real build, `prepublishOnly`, `.npmignore`, MIT LICENSE; verify with `npm pack` |
-| 6 | ESM output not Node-runnable (extensionless relative imports) | Add `.js` extensions in `src`; `tsconfig.build.json` emits `dist/` |
-| 7 | No CI | `.github/workflows/ci.yml`: install → typecheck → lint → test |
-| 8 | No release automation | `.github/workflows/release.yml`: `npm publish` on `v*` tag via `NPM_TOKEN` |
-| 9 | No linter (CI needs a lint step) | Add ESLint flat config + `lint` script |
+| OWASP | Detector | Scope(s) | ThreatType |
+|---|---|---|---|
+| **LLM01** Prompt Injection | `prompt-injection` + `jailbreak` (instruction-override, jailbreak, delimiter/role-escape) | input | `PROMPT_INJECTION`, `JAILBREAK` |
+| **LLM02** Insecure Output / PII | `pii-output` (detect + redact) | output | `PII_OUTPUT` |
+| **LLM06** Sensitive Disclosure | `sensitive-disclosure` (secrets, credentials, private keys, system-prompt leakage) | output | `SENSITIVE_DISCLOSURE` |
+| **LLM08** Excessive Agency | `tool-call-oob` (allowlist) + `excessive-agency` (dangerous shell/SQL/URL/SSRF/code-exec) | tool, output | `TOOL_CALL_OOB`, `EXCESSIVE_AGENCY` |
+| **LLM10** Unbounded Consumption | `unbounded-consumption` (length, char-run, token-repeat, "repeat forever") | input | `UNBOUNDED_CONSUMPTION` |
 
-## Slices (each verified: build + test + `npm pack` where relevant)
+### Orchestrator routing (priority order, first finding wins)
 
-1. **Read state → PLAN.md / STATUS.md** ✅
-2. **Fix redaction bug** — `pii-output.ts`; full suite green.
-3. **Merge PR #1** (`--no-ff`, `Closes #1`); delete `w6/tests` branch; suite green.
-4. **README rewrite** — features, OWASP map, install, usage, redaction docs, examples, badges, security.
-5. **Publish-ready** — LICENSE (MIT), package.json metadata, `.js` import extensions,
-   `tsconfig.build.json`, `.npmignore`, bump → `0.3.1`; `npm run build` + `npm pack` inspected.
-6. **CI + lint** — ESLint config + `ci.yml` (install/typecheck/lint/test).
-7. **Release workflow** — `release.yml` publishing on tag via `NPM_TOKEN` (documented; secret added by maintainer).
-8. **Tag v0.3.1** — after every slice verified. `npm publish` left for the maintainer.
+- `input`  → unbounded-consumption (on **raw** pre-truncation input) → prompt-injection → jailbreak
+- `output` → pii-output → sensitive-disclosure → excessive-agency (always returns `sanitized`)
+- `tool`   → tool-call-oob → excessive-agency
 
-## Non-goals / decisions
+`inspect(text)` runs **all** detectors and returns every finding + a merged redaction — used by the CLI.
 
-- **Do not publish.** `npm publish` is the maintainer's to run; CI only publishes on a tag once `NPM_TOKEN` exists.
-- Keep package name `gh-aegis` (matches repo + README).
-- Keep the zero-ML TypeScript stack; no runtime deps added.
-- The redaction fix changes `pii-output.ts` (the code), not the tests — under-redacting a
-  secret is the exact LLM02 failure this guard exists to prevent.
+## Deliverables / slices (each: detector/feature + tests + docs, verified by build+test+bench)
+
+1. **Detectors** — 3 new (`sensitive-disclosure`, `excessive-agency`, `unbounded-consumption`),
+   new `ThreatType`s, new `AegisOptions` (`maxLength`, `maxCharRun`, `maxTokenRepeat`),
+   orchestrator wiring, `inspect()`. Unit tests per detector. Existing 80 tests stay green.
+2. **Benchmark** (credibility centerpiece) — `datasets/` of labeled malicious+benign samples per
+   category (self-authored, CC0; provenance in `datasets/README.md`). `npm run bench` (tsx) runs
+   detectors → writes `bench/report.json` + markdown table → **exits non-zero** if any category
+   drops below `bench/thresholds.json`. Honest baselines from the first real run.
+3. **Adapters** — `gh-aegis/express`, `gh-aegis/fastify` middleware + `gh-aegis/ai` (Vercel AI SDK
+   `LanguageModelV1Middleware`). Subpath exports; express/fastify/ai as **optional peers** (zero
+   runtime deps shipped). Real integration tests (supertest; MockLanguageModelV1).
+4. **CLI** — `npx gh-aegis scan <file|->`: reads file/stdin, human + `--json` output, **exits
+   non-zero on findings**. `bin/gh-aegis.mjs` → `dist/cli.js`. Tested via `run(argv)`.
+5. **Tune FP** — iterate detectors against the benchmark; report FP rate honestly; set CI thresholds
+   conservatively below the measured baseline so real regressions fail.
+6. **Docs + CI + package** — README: OWASP map, real benchmark table, 3-line integration snippets,
+   CLI usage. CI adds `bench` + `build`. Bump `0.4.0`; `npm pack` audited (dist+bin only). Tag.
+
+## Threshold strategy
+
+Run bench first, read real per-category precision/recall/F1, then set `thresholds.json` a margin
+below measured (e.g. measured 0.95 → gate 0.85–0.90). Never fake numbers; never set a gate above the
+real baseline. CI `npm run bench` enforces the gates.
+
+## Non-negotiables / decisions
+
+- **Zero-ML, zero runtime deps, offline.** Adapters use `import type` only; frameworks are optional peers.
+- Backward compatible: existing `scan()` semantics and all v0.3.1 tests unchanged.
+- Dataset is self-authored under CC0 to guarantee permissive licensing and category purity
+  (each malicious sample exercises exactly one detector family; benign set includes FP traps).
+- **Do not publish to npm.** Tag only; publish is the maintainer's (via NPM_TOKEN).
