@@ -17,4 +17,11 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Tests and scripts may use `any` for terse mocks and harness glue.
+    files: ["tests/**/*.ts", "scripts/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 );

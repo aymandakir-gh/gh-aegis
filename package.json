@@ -38,6 +38,18 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./express": {
+      "types": "./dist/adapters/express.d.ts",
+      "import": "./dist/adapters/express.js"
+    },
+    "./fastify": {
+      "types": "./dist/adapters/fastify.d.ts",
+      "import": "./dist/adapters/fastify.js"
+    },
+    "./ai": {
+      "types": "./dist/adapters/ai.d.ts",
+      "import": "./dist/adapters/ai.js"
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -63,14 +75,29 @@
   "publishConfig": {
     "access": "public"
   },
+  "peerDependencies": {
+    "ai": ">=5",
+    "express": ">=4",
+    "fastify": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "ai": { "optional": true },
+    "express": { "optional": true },
+    "fastify": { "optional": true }
+  },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
+    "ai": "^6.0.206",
     "eslint": "^9.13.0",
+    "express": "^5.2.1",
+    "fastify": "^5.8.5",
     "globals": "^15.11.0",
     "tsx": "^4.19.0",
     "typescript": "^5.4.0",
     "typescript-eslint": "^8.10.0",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "zod": "^4.4.3"
   }
 }
