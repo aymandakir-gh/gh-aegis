@@ -3,6 +3,8 @@
  * Routes scan calls to the appropriate guard based on scope, in priority order
  * (first finding wins). `inspect()` runs every detector for the CLI.
  * Never throws: all internal errors produce safe=false, score=100 (fail-closed).
+ *
+ * OWASP coverage: LLM01, LLM02, LLM04, LLM05, LLM06, LLM07, LLM08, LLM10.
  */
 import type {
   AegisGuard,
@@ -20,19 +22,45 @@ import {
   scanSensitiveDisclosure,
   DISCLOSURE_PATTERNS,
 } from "./guards/sensitive-disclosure.js";
+import {
+  scanSystemPromptLeak,
+  SYSTEM_PROMPT_LEAK_PATTERNS,
+} from "./guards/system-prompt-leak.js";
+import { scanImproperOutput } from "./guards/improper-output.js";
+import {
+  scanDataPoisoning,
+  stripInvisible,
+} from "./guards/data-poisoning.js";
 import { scanExcessiveAgency } from "./guards/excessive-agency.js";
 import {
   scanUnboundedConsumption,
   type ConsumptionLimits,
 } from "./guards/unbounded-consumption.js";
 import { scanToolCallOob } from "./guards/tool-call-oob.js";
-import { redact } from "./guards/redact.js";
+import { redact, type RedactPattern } from "./guards/redact.js";
 
 const INTERNAL_ERROR_RESULT: ScanResult = {
   safe: false,
   score: 100,
   details: ["AegisInternalError — scan aborted, request blocked as precaution"],
 };
+
+/**
+ * Substring-redactable patterns surfaced in the `sanitized` copy. Active-content
+ * threats (improper-output / excessive-agency) and invisible-char smuggling are
+ * deliberately excluded — those are blocked, not partially "sanitized". Invisible
+ * chars are stripped separately via stripInvisible().
+ */
+const SANITIZE_PATTERNS: RedactPattern[] = [
+  ...PII_PATTERNS,
+  ...DISCLOSURE_PATTERNS,
+  ...SYSTEM_PROMPT_LEAK_PATTERNS,
+];
+
+/** Produce a safe copy: strip invisible smuggling chars, then redact secrets/PII. */
+function sanitizeOutput(text: string): string {
+  return redact(stripInvisible(text), SANITIZE_PATTERNS).sanitized;
+}
 
 /** Convert an unsafe ScanResult into an OWASP-annotated Finding. */
 function toFinding(r: ScanResult): Finding {
@@ -107,22 +135,22 @@ class DefaultAegisGuard implements AegisGuard {
         }
 
         case "output": {
-          // PII (LLM02) → sensitive disclosure (LLM06) → excessive agency (LLM08).
-          // `sanitized` is always present for output scope.
-          const pii = scanPiiOutput(text, context);
-          if (!pii.safe) {
-            result = pii;
-            break;
-          }
-          const disclosure = scanSensitiveDisclosure(text, context);
-          if (!disclosure.safe) {
-            result = disclosure;
-            break;
-          }
-          const agency = scanExcessiveAgency(text, context);
-          result = agency.safe
-            ? { safe: true, score: 0, sanitized: pii.sanitized }
-            : { ...agency, sanitized: pii.sanitized };
+          // pii(LLM02) → system-prompt-leak(LLM07) → sensitive-disclosure(LLM06)
+          // → improper-output(LLM05) → excessive-agency(LLM08) → poisoning(LLM04).
+          // `sanitized` is ALWAYS present for output scope (safe copy of the text).
+          const sanitized = sanitizeOutput(text);
+          const ordered: ScanResult[] = [
+            scanPiiOutput(text, context),
+            scanSystemPromptLeak(text, context),
+            scanSensitiveDisclosure(text, context),
+            scanImproperOutput(text, context),
+            scanExcessiveAgency(text, context),
+            scanDataPoisoning(text, context),
+          ];
+          const hit = ordered.find((r) => !r.safe);
+          result = hit
+            ? { ...hit, sanitized }
+            : { safe: true, score: 0, sanitized };
           break;
         }
 
@@ -137,9 +165,15 @@ class DefaultAegisGuard implements AegisGuard {
             result = consumption;
             break;
           }
-          // Injection first; if clean, jailbreak.
-          const injResult = scanPromptInjection(text, context);
-          result = injResult.safe ? scanJailbreak(text, context) : injResult;
+          // injection(LLM01) → jailbreak(LLM01) → system-prompt-extraction(LLM07)
+          // → poisoning(LLM04). First finding wins.
+          const ordered: ScanResult[] = [
+            scanPromptInjection(text, context),
+            scanJailbreak(text, context),
+            scanSystemPromptLeak(text, context),
+            scanDataPoisoning(text, context),
+          ];
+          result = ordered.find((r) => !r.safe) ?? { safe: true, score: 0 };
           break;
         }
       }
@@ -181,8 +215,11 @@ class DefaultAegisGuard implements AegisGuard {
         scanUnboundedConsumption(input, this.consumptionLimits),
         scanPromptInjection(text),
         scanJailbreak(text),
+        scanSystemPromptLeak(text),
+        scanDataPoisoning(text),
         scanPiiOutput(text),
         scanSensitiveDisclosure(text),
+        scanImproperOutput(text),
         scanExcessiveAgency(text),
       ];
 
@@ -191,11 +228,8 @@ class DefaultAegisGuard implements AegisGuard {
         .map(toFinding)
         .sort((a, b) => b.score - a.score);
 
-      // Merged redaction of every PII + sensitive-disclosure match.
-      const { sanitized } = redact(text, [
-        ...PII_PATTERNS,
-        ...DISCLOSURE_PATTERNS,
-      ]);
+      // Safe copy: strip invisible smuggling chars, then redact PII/secrets/leaks.
+      const sanitized = sanitizeOutput(text);
 
       return { safe: findings.length === 0, findings, sanitized };
     } catch {

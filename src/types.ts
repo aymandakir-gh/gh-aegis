@@ -1,9 +1,10 @@
 /**
  * Aegis — Type definitions
- * OWASP LLM Top 10 reference:
+ * OWASP LLM Top 10 reference (8 families covered):
  *   LLM01 (Prompt Injection), LLM02 (Insecure Output / PII),
- *   LLM06 (Sensitive Information Disclosure), LLM08 (Excessive Agency),
- *   LLM10 (Unbounded Consumption).
+ *   LLM04 (Data & Model Poisoning), LLM05 (Improper Output Handling),
+ *   LLM06 (Sensitive Information Disclosure), LLM07 (System Prompt Leakage),
+ *   LLM08 (Excessive Agency), LLM10 (Unbounded Consumption).
  */
 
 // ─── Threat Type Enum ─────────────────────────────────────────────────────────
@@ -18,8 +19,17 @@ export enum ThreatType {
   /** LLM02 — LLM output contains PII (email, phone, IBAN, API key) */
   PII_OUTPUT = "PII_OUTPUT",
 
-  /** LLM06 — Output leaks secrets, credentials, private keys, or the system prompt */
+  /** LLM04 — Hidden/obfuscated payload smuggled via invisible Unicode, bidi override, or tag chars */
+  DATA_POISONING = "DATA_POISONING",
+
+  /** LLM05 — Output carries active content (XSS/HTML, dangerous URI, SSTI, ANSI) that a downstream interpreter would mishandle */
+  IMPROPER_OUTPUT = "IMPROPER_OUTPUT",
+
+  /** LLM06 — Output leaks secrets, credentials, or private keys */
   SENSITIVE_DISCLOSURE = "SENSITIVE_DISCLOSURE",
+
+  /** LLM07 — System-prompt extraction attempt (input) or system-prompt leakage (output) */
+  SYSTEM_PROMPT_LEAK = "SYSTEM_PROMPT_LEAK",
 
   /** LLM08 — Tool call targets a resource outside the session allowlist */
   TOOL_CALL_OOB = "TOOL_CALL_OOB",
@@ -36,9 +46,21 @@ export const OWASP_LLM: Record<ThreatType, { id: string; name: string }> = {
   [ThreatType.PROMPT_INJECTION]: { id: "LLM01", name: "Prompt Injection" },
   [ThreatType.JAILBREAK]: { id: "LLM01", name: "Prompt Injection (Jailbreak)" },
   [ThreatType.PII_OUTPUT]: { id: "LLM02", name: "Insecure Output / PII" },
+  [ThreatType.DATA_POISONING]: {
+    id: "LLM04",
+    name: "Data & Model Poisoning (hidden-payload smuggling)",
+  },
+  [ThreatType.IMPROPER_OUTPUT]: {
+    id: "LLM05",
+    name: "Improper Output Handling",
+  },
   [ThreatType.SENSITIVE_DISCLOSURE]: {
     id: "LLM06",
     name: "Sensitive Information Disclosure",
+  },
+  [ThreatType.SYSTEM_PROMPT_LEAK]: {
+    id: "LLM07",
+    name: "System Prompt Leakage",
   },
   [ThreatType.TOOL_CALL_OOB]: { id: "LLM08", name: "Excessive Agency (tool OOB)" },
   [ThreatType.EXCESSIVE_AGENCY]: { id: "LLM08", name: "Excessive Agency" },

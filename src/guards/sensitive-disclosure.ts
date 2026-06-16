@@ -1,10 +1,11 @@
 /**
  * Sensitive Disclosure guard — LLM06
  *
- * Detects when model output leaks secrets, credentials, private keys, or the
- * system prompt itself — categories the PII guard (LLM02) does not cover. Matches
- * are redacted (position-based, shared with the PII guard) so callers can surface
- * a safe `sanitized` copy.
+ * Detects when model output leaks secrets, credentials, or private keys —
+ * categories the PII guard (LLM02) does not cover. Matches are redacted
+ * (position-based, shared with the PII guard) so callers can surface a safe
+ * `sanitized` copy. System-prompt leakage is handled separately by the LLM07
+ * guard (system-prompt-leak.ts).
  *
  * Deliberately disjoint from PII patterns (email/phone/IBAN/sk-…/ghp_…/Bearer) so
  * an output containing those still reports as PII_OUTPUT, not SENSITIVE_DISCLOSURE.
@@ -53,20 +54,9 @@ export const DISCLOSURE_PATTERNS: RedactPattern[] = [
     score: 88,
     label: "credential-assignment",
   },
-  // System-prompt leakage — the model revealing its own instructions.
-  {
-    pattern:
-      /\b(?:my (?:system )?(?:prompt|instructions?) (?:is|are|were)|here (?:is|are) my (?:system )?(?:prompt|instructions?)|the system prompt (?:is|says)|i (?:was|am) (?:instructed|programmed|told) to|my (?:initial|original) (?:prompt|instructions?))\b/i,
-    score: 85,
-    label: "system-prompt-leak",
-  },
-  // Verbatim system-prompt persona echo (classic leak signature).
-  {
-    pattern: /\byou are (?:a|an) [a-z ]{0,40}\bassistant\b[^.]{0,60}\b(?:created|trained|developed|made) by\b/i,
-    score: 82,
-    label: "system-persona-echo",
-  },
 ];
+// NOTE: system-prompt leakage / persona-echo patterns moved to the dedicated LLM07
+// guard (system-prompt-leak.ts). LLM06 is now purely secrets / keys / credentials.
 
 export function scanSensitiveDisclosure(
   input: string,

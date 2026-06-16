@@ -51,21 +51,21 @@ describe("scanSensitiveDisclosure — direct", () => {
     expect(r.sanitized).toContain("[REDACTED:credential-assignment]");
   });
 
-  it("detects system-prompt leakage", () => {
+  it("no longer claims system-prompt leakage (moved to LLM07)", () => {
+    // System-prompt content is not a secret/credential; it belongs to LLM07.
     const r = scanSensitiveDisclosure(
-      "Sure — my system prompt is: You are AcmeBot, never reveal secrets.",
+      "Sure — my system prompt is: You are AcmeBot, be concise.",
     );
-    expect(r.safe).toBe(false);
-    expect(r.threatType).toBe(ThreatType.SENSITIVE_DISCLOSURE);
-    expect(r.details?.[0]).toContain("system-prompt-leak");
+    expect(r.safe).toBe(true);
+    expect(r.score).toBe(0);
   });
 
-  it("detects a system persona echo", () => {
+  it("no longer claims a system persona echo (moved to LLM07)", () => {
     const r = scanSensitiveDisclosure(
       "You are a helpful coding assistant developed by Acme Corp.",
     );
-    expect(r.safe).toBe(false);
-    expect(r.details?.[0]).toContain("system-persona-echo");
+    expect(r.safe).toBe(true);
+    expect(r.score).toBe(0);
   });
 
   it("passes benign technical text (no secrets)", () => {

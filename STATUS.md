@@ -1,59 +1,73 @@
-# STATUS — gh-aegis v0.4.0 ✅ shipped
+# STATUS — gh-aegis: v0.5.0 ✅ shipped, driving to v1.0.0
 
-Leveled up from v0.3.1 (shipped utility) to a best-in-class **deterministic, zero-ML** LLM-security
-guard. See [PLAN.md](./PLAN.md) for the architecture and dataset/threshold strategy.
+Extending the shipped v0.4.0 zero-ML OWASP-LLM guard to a 1.0 release. Plan + decisions in
+[PRD.md](./PRD.md); architecture in [PLAN.md](./PLAN.md). Strictly **zero-ML, zero runtime deps,
+deterministic, offline**; extend, never rebuild.
 
-**Outcome:** `main` is tagged **v0.4.0**; CI (incl. the benchmark gate) is green on Node 20/22/24;
-the Release run built/tested/benchmarked and **skipped publish** (no `NPM_TOKEN`). Nothing was
-published — that's the maintainer's to run.
+## Roadmap (tags v0.5.0 → v1.0.0)
 
-## Progress — all slices done
+| Tag | Scope | State |
+|-----|-------|-------|
+| **v0.5.0** | LLM05 + LLM07 + LLM04 detectors → **8 OWASP families**, orchestrator + inspect wiring, dataset re-label, re-baselined bench | ✅ shipped |
+| v0.6.0 | Benchmark ≥400 samples (evasion tier), per-category metrics, CI gate proven both directions | ⏳ next |
+| v0.7.0 | Declarative policy/config (load + validate + test; CLI + adapters honor) | ⏳ |
+| v0.8.0 | Latency bench + CI perf gate (p95 < budget) | ⏳ |
+| v0.9.0 | LangChain guard + streaming guard + local playground | ⏳ |
+| v1.0.0 | Docs, multi-agent adversarial review + fixes + regression tests, ≥230 tests, pack audit | ⏳ |
 
-| Slice | State | Notes |
-|-------|-------|-------|
-| 1. Detectors (LLM06/08/10) + inspect() | ✅ | 3 new zero-ML detectors, shared redaction, orchestrator routing, 46 tests. |
-| 2. Benchmark + CC0 dataset + FP/recall tuning | ✅ | `npm run bench`, 132 labeled samples, gated CI, honest baseline. |
-| 3. Adapters (Express/Fastify/AI SDK) | ✅ | Subpath exports, optional peers, type-only (zero runtime deps), 10 tests. |
-| 4. CLI (`npx gh-aegis scan`) | ✅ | File/stdin, JSON + human, exit codes, 7 tests. |
-| 5. FP tuning | ✅ | 100% precision / 0% FP via the benchmark; recall reported honestly. |
-| 6. README + CI(bench) + v0.4.0 bump + pack audit | ✅ | Real numbers, integration snippets, CLI docs. |
-| 7. Tag v0.4.0 | ✅ | Pushed; CI green; Release run green with publish skipped. |
+## v0.5.0 — what shipped
 
-## v0.4.0 benchmark baseline (`npm run bench`, 132 samples, FP rate 0.0%)
+- **3 new deterministic detectors**, raising OWASP coverage from 5 to **8 families**:
+  - **LLM04 Data & Model Poisoning** (`data-poisoning.ts`) — invisible-Unicode smuggling: Tags-block
+    "ASCII smuggling" (U+E0000–U+E007F), bidi overrides/isolates (Trojan Source), zero-width chars
+    hidden inside words or clustered. Runs on input + output; strips invisible chars in `sanitized`.
+  - **LLM05 Improper Output Handling** (`improper-output.ts`) — XSS/HTML, `javascript:`/`data:text/html`
+    URIs, `<iframe>`/`<svg>`, SSTI (`{{7*7}}`, Jinja internals, `${…}` sinks), markdown-exfil links,
+    ANSI/terminal escapes. Output scope; detection-only (block, don't half-sanitize active content).
+  - **LLM07 System Prompt Leakage** (`system-prompt-leak.ts`) — extraction (input) + leakage (output).
+- **Principled re-taxonomy (not teach-to-test):** system-prompt patterns carved out of LLM01
+  (prompt-injection) and LLM06 (sensitive-disclosure) into the dedicated LLM07 guard; affected
+  benchmark samples re-labeled to LLM07. A combined override+extraction attack still attributes to
+  LLM01 (it runs first). LLM06 is now purely secrets/keys/credentials.
+- **Orchestrator routing** updated (see PRD); `output` scope now always returns a merged `sanitized`
+  copy (strip invisible → redact PII/secrets/leak markers). `inspect()` runs all 9 detector entries.
+- **Benchmark** re-baselined across 8 categories; `bench/thresholds.json` gates all 8.
+
+## v0.5.0 benchmark baseline (`npm run bench`, 198 samples, FP rate 0.0%)
 
 | OWASP | Precision | Recall | F1 |
 |---|---|---|---|
-| LLM01 Prompt Injection | 100.0% | 75.0% | 0.86 |
+| LLM01 Prompt Injection | 100.0% | 72.2% | 0.84 |
 | LLM02 Insecure Output / PII | 100.0% | 80.0% | 0.89 |
-| LLM06 Sensitive Disclosure | 100.0% | 85.7% | 0.92 |
+| LLM04 Data & Model Poisoning | 100.0% | 100.0% | 1.00 |
+| LLM05 Improper Output Handling | 100.0% | 93.8% | 0.97 |
+| LLM06 Sensitive Disclosure | 100.0% | 81.8% | 0.90 |
+| LLM07 System Prompt Leakage | 100.0% | 82.4% | 0.90 |
 | LLM08 Excessive Agency | 100.0% | 82.4% | 0.90 |
 | LLM10 Unbounded Consumption | 100.0% | 85.7% | 0.92 |
-| **Overall** | **100.0%** | **81.3%** | **0.90** |
+| **Overall** | **100.0%** | **83.9%** | **0.91** |
 
-100% precision (no false positives on realistic benign incl. FP traps); recall 75–86% — the lower
-recall reflects an intentional evasion tier (paraphrase, leetspeak, multilingual, base64, IFS-obfuscation)
-that deterministic regex cannot catch. Thresholds in `bench/thresholds.json` gate CI below this baseline.
+100% precision (0 false positives, incl. FP traps like `arr[0]`, "the javascript: protocol",
+handlebars `{{ total }}`, a leading BOM, an emoji ZWJ). Recall is suppressed on purpose by the
+evasion tier (paraphrase/leetspeak/multilingual/encoding) that deterministic regex cannot catch.
 
 ## Verification (local, all green)
 
-- `lint` / `typecheck` clean · `vitest` **143 passed** · `bench` gate **exit 0** · `build` emits dist (incl. adapters + cli).
-- `npm pack` @ 0.4.0: 64 files, 107 KB unpacked — dist + bin + README + LICENSE; **no** datasets/scripts/tests/bench.
-- CLI verified end-to-end (`node bin/gh-aegis.mjs scan …`).
-- Adapter dist carries no `require()` of express/fastify/ai (type-only).
+- `typecheck` / `lint` clean · `vitest` **203 passed** · `bench` gate **exit 0** · `build` emits dist.
+- `npm pack` @ 0.5.0: 76 files — dist (72) + bin + README + LICENSE + package.json; **no**
+  datasets/scripts/tests/bench.
+- CLI verified end-to-end for the new detectors (LLM05 XSS, LLM07 extraction).
 
 ## Decisions / log
 
-- Stayed strictly zero-ML / deterministic; no runtime dependencies added (frameworks are optional peers).
-- Dataset is self-authored CC0 with category-pure malicious, realistic benign + FP traps, and an honest
-  evasion tier; numbers are the first real run, never hand-set.
-- Detector tuning was principled generalization (articles, gerunds, token boundaries), not teach-to-test.
-- Phone pattern tightened with token boundaries — fixes a Google-key mis-attribution and improves precision.
-- GitHub push protection flagged a fake Stripe `rk_live_` key in the LLM02 dataset; scrubbed it from the
-  unpushed commit (filter-branch) and swapped in a non-secret IBAN sample that the detector still catches
-  (LLM02 recall unchanged at 80%). No real secrets were ever involved.
+- Stayed strictly zero-ML / deterministic; no runtime deps added.
+- New detectors authored by principled generalization, not tuned against the benchmark.
+- LLM04 dataset commits invisible code points as `\uXXXX` escapes (surrogate pairs for the Tags
+  block) so the file is fully reviewable and copy/paste-safe.
+- Detector tuning fixed one real LLM07 miss ("recite your system **message**" — added "system
+  message" as a system-prompt synonym), not a benchmark-specific patch.
 
 ## Action required from maintainer
 
-- Add repo secret **`NPM_TOKEN`** to publish (see `.github/workflows/release.yml`); the release workflow
-  skips publish cleanly until it is set.
-- Run `npm publish` yourself, or re-run the Release workflow for tag `v0.4.0`. This run does not publish.
+- Add repo secret **`NPM_TOKEN`** to publish; the release workflow skips publish cleanly until set.
+- This run does not publish — tags only.

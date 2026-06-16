@@ -30,7 +30,10 @@ interface Sample {
 const EXPECTED: Record<string, ThreatType[]> = {
   LLM01: [ThreatType.PROMPT_INJECTION, ThreatType.JAILBREAK],
   LLM02: [ThreatType.PII_OUTPUT],
+  LLM04: [ThreatType.DATA_POISONING],
+  LLM05: [ThreatType.IMPROPER_OUTPUT],
   LLM06: [ThreatType.SENSITIVE_DISCLOSURE],
+  LLM07: [ThreatType.SYSTEM_PROMPT_LEAK],
   LLM08: [ThreatType.EXCESSIVE_AGENCY, ThreatType.TOOL_CALL_OOB],
   LLM10: [ThreatType.UNBOUNDED_CONSUMPTION],
 };
@@ -38,7 +41,10 @@ const EXPECTED: Record<string, ThreatType[]> = {
 const OWASP_NAME: Record<string, string> = {
   LLM01: "Prompt Injection",
   LLM02: "Insecure Output / PII",
+  LLM04: "Data & Model Poisoning",
+  LLM05: "Improper Output Handling",
   LLM06: "Sensitive Disclosure",
+  LLM07: "System Prompt Leakage",
   LLM08: "Excessive Agency",
   LLM10: "Unbounded Consumption",
 };

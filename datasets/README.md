@@ -7,7 +7,10 @@ precision / recall / F1. One file per OWASP category.
 |---|---|---|---|
 | `llm01-prompt-injection.json` | LLM01 | prompt-injection, jailbreak | input |
 | `llm02-pii.json` | LLM02 | pii-output | output |
+| `llm04-data-poisoning.json` | LLM04 | data-poisoning (invisible-Unicode) | input/output |
+| `llm05-improper-output.json` | LLM05 | improper-output | output |
 | `llm06-sensitive-disclosure.json` | LLM06 | sensitive-disclosure | output |
+| `llm07-system-prompt-leak.json` | LLM07 | system-prompt-leak | input/output |
 | `llm08-excessive-agency.json` | LLM08 | excessive-agency | output |
 | `llm10-unbounded-consumption.json` | LLM10 | unbounded-consumption | input |
 
@@ -41,6 +44,12 @@ Authoring principles (to keep the benchmark honest, not "taught to the test"):
   guard may not catch, so recall is reported truthfully rather than inflated.
 - **Deterministic** — LLM10 length/repetition samples are generated to exceed the detector's
   default limits; no randomness, no network.
+- **Invisible-character samples (LLM04)** — the malicious LLM04 samples embed real but invisible
+  Unicode code points (zero-width chars U+200B–U+200D/U+2060/U+FEFF, bidi overrides U+202A–U+202E
+  and isolates U+2066–U+2069, and Unicode Tags-block chars U+E0000–U+E007F for "ASCII smuggling").
+  They are committed as `\uXXXX` JSON escapes (surrogate pairs for the supplementary Tags block) so
+  the file stays fully reviewable in a normal editor and survives copy/paste. Benign LLM04 samples
+  are ordinary text (incl. a single legitimate leading BOM and an emoji), which must pass.
 
 The numbers this produces are baselines for a *deterministic, zero-ML* guard — strong on the
 known attack shapes it encodes, with honestly-reported misses on novel phrasing.

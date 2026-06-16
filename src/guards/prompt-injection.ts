@@ -38,11 +38,6 @@ const INJECTION_PATTERNS: InjectionPattern[] = [
     label: "system-prompt-injection",
   },
   {
-    pattern: /reveal\s+(?:your\s+|the\s+|its\s+)?(?:(?:system|internal|initial|original|hidden|secret)\s+(?:prompt|instructions?|directives?|configuration)|(?:system\s+)?prompt|training\s+data)/i,
-    score: 85,
-    label: "reveal-system-prompt",
-  },
-  {
     pattern: /\boverride\s+(your\s+)?(safety|guidelines?|rules?|restrictions?|instructions?)/i,
     score: 90,
     label: "override-safety",
@@ -57,12 +52,11 @@ const INJECTION_PATTERNS: InjectionPattern[] = [
     score: 80,
     label: "xml-system-tag-injection",
   },
-  {
-    pattern: /print\s+(your\s+)?(full\s+)?(system|initial)\s+(prompt|instructions?)/i,
-    score: 85,
-    label: "print-system-prompt",
-  },
 ];
+// NOTE: system-prompt *extraction* patterns ("reveal/print your system prompt")
+// moved to the dedicated LLM07 guard (system-prompt-leak.ts). A combined
+// "ignore previous instructions AND reveal your prompt" still trips this guard's
+// instruction-override patterns first, so it stays attributed to LLM01.
 
 export function scanPromptInjection(
   input: string,

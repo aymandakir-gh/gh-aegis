@@ -1,7 +1,7 @@
 {
   "name": "gh-aegis",
-  "version": "0.4.0",
-  "description": "Deterministic, zero-ML guard for the OWASP LLM Top 10 — prompt injection, PII redaction, sensitive disclosure, excessive agency, and unbounded consumption. Express/Fastify/AI-SDK adapters + CLI.",
+  "version": "0.5.0",
+  "description": "Deterministic, zero-ML guard for the OWASP LLM Top 10 — prompt injection, PII redaction, data poisoning, improper output handling, sensitive disclosure, system-prompt leakage, excessive agency, and unbounded consumption (8 families). Express/Fastify/AI-SDK adapters + CLI.",
   "keywords": [
     "owasp",
     "owasp-llm-top-10",
@@ -85,9 +85,15 @@
     "fastify": ">=4"
   },
   "peerDependenciesMeta": {
-    "ai": { "optional": true },
-    "express": { "optional": true },
-    "fastify": { "optional": true }
+    "ai": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
