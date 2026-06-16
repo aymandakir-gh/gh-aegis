@@ -8,8 +8,8 @@
  * v0.3.1: redaction is position-based with overlap resolution (highest-score
  * pattern wins) so a broad pattern can no longer partially clobber a secret.
  */
-import type { ScanContext, ScanResult } from "../types";
-import { ThreatType } from "../types";
+import type { ScanContext, ScanResult } from "../types.js";
+import { ThreatType } from "../types.js";
 
 interface PiiPattern {
   pattern: RegExp;
@@ -20,7 +20,7 @@ interface PiiPattern {
 const PII_PATTERNS: PiiPattern[] = [
   // Email addresses
   {
-    pattern: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/,
+    pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/,
     score: 80,
     label: "email-address",
   },
@@ -50,7 +50,7 @@ const PII_PATTERNS: PiiPattern[] = [
   },
   // Anthropic API key
   {
-    pattern: /\bsk-ant-[a-zA-Z0-9\-]{20,}\b/,
+    pattern: /\bsk-ant-[a-zA-Z0-9-]{20,}\b/,
     score: 95,
     label: "anthropic-api-key",
   },

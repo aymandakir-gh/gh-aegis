@@ -1,17 +1,74 @@
 {
   "name": "gh-aegis",
-  "version": "0.3.0",
-  "description": "Defensive AI security middleware — prompt injection, jailbreak, PII detection+redaction, tool-OOB detection. Zero-ML: regex + rule engine.",
+  "version": "0.3.1",
+  "description": "Defensive AI security middleware — prompt injection, jailbreak, PII detection + redaction, and tool-OOB detection for the OWASP LLM Top 10. Zero-ML: regex + rule engine.",
+  "keywords": [
+    "owasp",
+    "owasp-llm-top-10",
+    "llm",
+    "llm-security",
+    "ai-security",
+    "prompt-injection",
+    "jailbreak",
+    "pii",
+    "pii-redaction",
+    "guardrails",
+    "llm-guard",
+    "security",
+    "zero-ml",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "GrowthHackers",
+  "homepage": "https://github.com/aymandakir-gh/gh-aegis#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aymandakir-gh/gh-aegis.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aymandakir-gh/gh-aegis/issues"
+  },
   "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepack": "npm run clean && npm run build",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm run test"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "devDependencies": {
+    "@eslint/js": "^9.13.0",
     "@types/node": "^20.0.0",
+    "eslint": "^9.13.0",
+    "globals": "^15.11.0",
     "typescript": "^5.4.0",
+    "typescript-eslint": "^8.10.0",
     "vitest": "^4.1.0"
   }
 }

@@ -2,8 +2,8 @@
  * PromptInjection guard — LLM01
  * Detects attempts to override, replace, or extract system-level instructions.
  */
-import type { ScanContext, ScanResult } from "../types";
-import { ThreatType } from "../types";
+import type { ScanContext, ScanResult } from "../types.js";
+import { ThreatType } from "../types.js";
 
 interface InjectionPattern {
   pattern: RegExp;

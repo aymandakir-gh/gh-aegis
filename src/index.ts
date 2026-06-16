@@ -10,6 +10,6 @@
  *   console.error("Threat detected:", result.threatType, result.score);
  * }
  */
-export { createAegisGuard } from "./aegis-guard";
-export { ThreatType } from "./types";
-export type { AegisGuard, AegisOptions, ScanContext, ScanResult } from "./types";
+export { createAegisGuard } from "./aegis-guard.js";
+export { ThreatType } from "./types.js";
+export type { AegisGuard, AegisOptions, ScanContext, ScanResult } from "./types.js";

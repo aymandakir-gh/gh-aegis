@@ -3,8 +3,8 @@
  * Blocks tool calls that are not in the session-level allowlist.
  * Fail-closed: empty allowlist blocks everything.
  */
-import type { ScanContext, ScanResult } from "../types";
-import { ThreatType } from "../types";
+import type { ScanContext, ScanResult } from "../types.js";
+import { ThreatType } from "../types.js";
 
 export function scanToolCallOob(
   input: string,

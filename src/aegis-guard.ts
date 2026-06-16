@@ -3,11 +3,11 @@
  * Routes scan calls to the appropriate guard based on scope.
  * Never throws: all internal errors produce safe=false, score=100 (fail-closed).
  */
-import type { AegisGuard, AegisOptions, ScanContext, ScanResult } from "./types";
-import { scanPromptInjection } from "./guards/prompt-injection";
-import { scanJailbreak } from "./guards/jailbreak";
-import { scanPiiOutput } from "./guards/pii-output";
-import { scanToolCallOob } from "./guards/tool-call-oob";
+import type { AegisGuard, AegisOptions, ScanContext, ScanResult } from "./types.js";
+import { scanPromptInjection } from "./guards/prompt-injection.js";
+import { scanJailbreak } from "./guards/jailbreak.js";
+import { scanPiiOutput } from "./guards/pii-output.js";
+import { scanToolCallOob } from "./guards/tool-call-oob.js";
 
 const INTERNAL_ERROR_RESULT: ScanResult = {
   safe: false,

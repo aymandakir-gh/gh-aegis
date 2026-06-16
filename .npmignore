@@ -1,0 +1,16 @@
+# The published tarball ships only built dist/ (+ README, LICENSE).
+# The "files" allowlist in package.json is authoritative; this is belt-and-suspenders.
+src/
+tests/
+**/*.test.ts
+**/*.spec.ts
+tsconfig*.json
+vitest.config.ts
+eslint.config.js
+.github/
+PLAN.md
+STATUS.md
+*.tsbuildinfo
+coverage/
+.env
+.env.local

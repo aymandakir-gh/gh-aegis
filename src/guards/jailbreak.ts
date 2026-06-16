@@ -2,8 +2,8 @@
  * Jailbreak guard — LLM01 variant
  * Detects role-escape, DAN variants, and "no restrictions" bypass attempts.
  */
-import type { ScanContext, ScanResult } from "../types";
-import { ThreatType } from "../types";
+import type { ScanContext, ScanResult } from "../types.js";
+import { ThreatType } from "../types.js";
 
 interface JailbreakPattern {
   pattern: RegExp;
