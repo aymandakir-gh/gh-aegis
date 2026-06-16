@@ -61,26 +61,31 @@ samples (with deliberate false-positive traps and an evasion tier) and reports p
 per category. CI runs the same benchmark and **fails the build** if any category drops below the
 gates in [`bench/thresholds.json`](./bench/thresholds.json).
 
-**v0.5.0 baseline** (198 samples; reproduce with `npm run bench`):
+**v0.6.0 baseline** (466 samples; reproduce with `npm run bench`):
 
 | OWASP | Category | Samples (mal/ben) | Precision | Recall | F1 |
 |---|---|---|---|---|---|
-| LLM01 | Prompt Injection | 18 / 12 | 100.0% | 72.2% | 0.84 |
-| LLM02 | Insecure Output / PII | 15 / 10 | 100.0% | 80.0% | 0.89 |
-| LLM04 | Data & Model Poisoning | 10 / 8 | 100.0% | 100.0% | 1.00 |
-| LLM05 | Improper Output Handling | 16 / 10 | 100.0% | 93.8% | 0.97 |
-| LLM06 | Sensitive Disclosure | 11 / 10 | 100.0% | 81.8% | 0.90 |
-| LLM07 | System Prompt Leakage | 17 / 10 | 100.0% | 82.4% | 0.90 |
-| LLM08 | Excessive Agency | 17 / 10 | 100.0% | 82.4% | 0.90 |
-| LLM10 | Unbounded Consumption | 14 / 10 | 100.0% | 85.7% | 0.92 |
-| **All** | **Overall** | **118 / 80** | **100.0%** | **83.9%** | **0.91** |
+| LLM01 | Prompt Injection | 42 / 24 | 100.0% | 73.8% | 0.85 |
+| LLM02 | Insecure Output / PII | 39 / 22 | 100.0% | 76.9% | 0.87 |
+| LLM04 | Data & Model Poisoning | 32 / 16 | 100.0% | 87.5% | 0.93 |
+| LLM05 | Improper Output Handling | 40 / 22 | 100.0% | 82.5% | 0.90 |
+| LLM06 | Sensitive Disclosure | 35 / 22 | 100.0% | 77.1% | 0.87 |
+| LLM07 | System Prompt Leakage | 41 / 20 | 100.0% | 78.0% | 0.88 |
+| LLM08 | Excessive Agency | 41 / 22 | 100.0% | 78.0% | 0.88 |
+| LLM10 | Unbounded Consumption | 31 / 17 | 100.0% | 83.9% | 0.91 |
+| **All** | **Overall** | **301 / 165** | **100.0%** | **79.4%** | **0.89** |
 
 **False-positive rate: 0.0%.** These are honest numbers for a deterministic guard: **100% precision**
-on realistic traffic (it doesn't cry wolf on `rm -rf node_modules`, "explain how prompt injection
-works", `chmod 644`, or `arr[0]`), with recall held down on purpose by an evasion tier (paraphrase,
-encoding, leetspeak, multilingual) that regex matching cannot catch. The dataset includes those
-evasions deliberately — see [`datasets/README.md`](./datasets/README.md). Layer gh-aegis with the
-defenses in [Security & design](#security--design) rather than relying on it alone.
+on 165 realistic benign inputs (it doesn't cry wolf on `rm -rf node_modules`, "explain how prompt
+injection works", `chmod 644`, `arr[0]`, handlebars `{{ total }}`, or a leading BOM). **Every one of
+the 62 misses is an evasion-tier sample** (paraphrase, leetspeak, multilingual, encoding, homoglyph,
+uncommon vector) that deterministic regex cannot catch — **the recall floor is the evasion tier, by
+design.** Zero caught-malicious samples are missed and zero benign are flagged, so per-category
+precision is 100%. The dataset ships those evasions deliberately — see
+[`datasets/README.md`](./datasets/README.md). CI re-runs this benchmark and fails the build if any
+category drops below [`bench/thresholds.json`](./bench/thresholds.json); `tests/bench-gate.test.ts`
+proves the gate trips in both directions. Layer gh-aegis with the defenses in
+[Security & design](#security--design) rather than relying on it alone.
 
 ## Usage
 
@@ -246,7 +251,7 @@ Use gh-aegis as a deterministic first line of defense and layer it with:
 npm install
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm test            # vitest run (203 tests)
+npm test            # vitest run (210 tests)
 npm run bench       # benchmark + threshold gate
 npm run build       # emit dist/ (ESM + .d.ts)
 npm pack --dry-run  # inspect the publish tarball

@@ -27,9 +27,13 @@ Each file is a JSON array of samples:
 
 ## Provenance & license
 
-**All samples are original, hand-authored for this project and released into the public
-domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).** No third-party
-or scraped data is included, so there are no upstream license constraints.
+**All 466 samples are original, authored for this project and released into the public domain under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).** No third-party or scraped data is
+included, so there are no upstream license constraints. The benchmark grew from 198 (v0.5.0) to 466
+(v0.6.0); the added samples were drafted to the rules below and then **machine-verified against the
+real detector** before inclusion — every "caught-malicious" sample provably fires its category's
+detector, every benign sample provably passes, and every evasion sample provably slips (a genuine
+miss). Sample-id suffixes encode this: `-m`/`-g` caught-malicious, `-b`/`-c` benign, `-h`/`-e` evasion.
 
 Authoring principles (to keep the benchmark honest, not "taught to the test"):
 

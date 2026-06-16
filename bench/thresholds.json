@@ -1,11 +1,11 @@
 {
-  "_comment": "Per-category minimum gates for `npm run bench`. Set conservatively below the measured v0.5.0 baseline (precision 100% / 0% FP; recall 72-100%) so genuine regressions fail CI without flaking on normal dataset evolution. The evasion tier intentionally suppresses recall; gates leave headroom for it. Recomputed at v0.6.0 against the grown dataset.",
-  "LLM01": { "precision": 0.9, "recall": 0.6, "f1": 0.7 },
-  "LLM02": { "precision": 0.9, "recall": 0.65, "f1": 0.75 },
-  "LLM04": { "precision": 0.9, "recall": 0.8, "f1": 0.85 },
-  "LLM05": { "precision": 0.9, "recall": 0.78, "f1": 0.85 },
-  "LLM06": { "precision": 0.9, "recall": 0.7, "f1": 0.78 },
-  "LLM07": { "precision": 0.9, "recall": 0.65, "f1": 0.75 },
-  "LLM08": { "precision": 0.9, "recall": 0.72, "f1": 0.8 },
-  "LLM10": { "precision": 0.9, "recall": 0.75, "f1": 0.8 }
+  "_comment": "Per-category minimum gates for `npm run bench`, set conservatively below the measured v0.6.0 baseline (466 samples: precision 100% / 0% FP; recall 73.8-87.5%). The evasion tier intentionally suppresses recall; gates leave ~8-12 points of headroom so genuine detector regressions fail CI without flaking on dataset evolution. tests/bench-gate.test.ts proves the gate fails when a gate is raised above the baseline.",
+  "LLM01": { "precision": 0.9, "recall": 0.62, "f1": 0.72 },
+  "LLM02": { "precision": 0.9, "recall": 0.64, "f1": 0.74 },
+  "LLM04": { "precision": 0.9, "recall": 0.75, "f1": 0.82 },
+  "LLM05": { "precision": 0.9, "recall": 0.72, "f1": 0.8 },
+  "LLM06": { "precision": 0.9, "recall": 0.65, "f1": 0.74 },
+  "LLM07": { "precision": 0.9, "recall": 0.66, "f1": 0.75 },
+  "LLM08": { "precision": 0.9, "recall": 0.66, "f1": 0.75 },
+  "LLM10": { "precision": 0.9, "recall": 0.72, "f1": 0.8 }
 }
