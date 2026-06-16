@@ -13,6 +13,13 @@ export interface RedactPattern {
   pattern: RegExp;
   score: number;
   label: string;
+  /**
+   * Optional secondary check on the matched text. When present and it returns
+   * false, the match is discarded (not flagged, not redacted) — used to add
+   * structural validation a regex alone cannot express (e.g. an IBAN mod-97
+   * checksum), which removes false positives without dropping true positives.
+   */
+  validate?: (match: string) => boolean;
 }
 
 interface Match {
@@ -45,7 +52,7 @@ export function redact(
 ): RedactionResult {
   const matches: Match[] = [];
 
-  for (const { pattern, score, label } of patterns) {
+  for (const { pattern, score, label, validate } of patterns) {
     const global = toGlobal(pattern);
     let m: RegExpExecArray | null;
     while ((m = global.exec(input)) !== null) {
@@ -53,6 +60,7 @@ export function redact(
         global.lastIndex++;
         continue;
       }
+      if (validate && !validate(m[0])) continue; // failed structural check — not a real match
       matches.push({
         start: m.index,
         end: m.index + m[0].length,

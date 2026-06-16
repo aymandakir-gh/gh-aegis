@@ -16,12 +16,17 @@ interface AgencyPattern {
   pattern: RegExp;
   score: number;
   label: string;
+  /** Only evaluate on the "tool" scope (an actual request/command target). */
+  toolOnly?: boolean;
 }
 
 const AGENCY_PATTERNS: AgencyPattern[] = [
-  // rm -rf against a dangerous root (/, ~, *, $HOME, .).
+  // rm -rf (or -fr, -rfv, …) against a dangerous root (/, ~, *, $HOME, .). The
+  // flag run is a single bounded class with two lookaheads asserting r AND f are
+  // present, so there is no catastrophic backtracking on `rm -rrrr…`.
   {
-    pattern: /\brm\s+-[a-z]*r[a-z]*f[a-z]*\s+(?:--no-preserve-root\s+)?(?:\/(?:\s|$|\*)|\/\s|~|\$HOME|\*|\.\s*$)/i,
+    pattern:
+      /\brm\s+-(?=[a-z]{0,9}r)(?=[a-z]{0,9}f)[a-z]{1,10}\s+(?:--no-preserve-root\s+)?(?:\/(?:\s|$|\*)|\/\s|~|\$HOME|\*|\.\s*$)/i,
     score: 97,
     label: "rm-rf-root",
   },
@@ -72,10 +77,14 @@ const AGENCY_PATTERNS: AgencyPattern[] = [
     score: 86,
     label: "sql-injection-chain",
   },
-  // Code-exec sinks.
+  // Code-exec sinks invoked with a DANGEROUS argument — a quoted command line
+  // (string containing a space), a template literal with interpolation, or a
+  // concatenation. A bare mention like `eval(userInput)` or `subprocess.run()`
+  // in prose / code discussion no longer trips it (that was a major false positive
+  // on coding-assistant output), only an actually-weaponized call.
   {
     pattern:
-      /\b(?:os\.system|subprocess\.(?:call|run|Popen)|child_process\.(?:exec|execSync|spawn)|eval|exec)\s*\(/,
+      /\b(?:os\.system|subprocess\.(?:call|run|Popen)|child_process\.(?:exec|execSync|spawn)|eval|exec)\s*\(\s*(?:[a-z]{0,2}["'][^"'\n]*\s[^"'\n]*["']|`[^`\n]*\$\{|[\w$.[\]'"]+\s*\+)/i,
     score: 84,
     label: "code-exec-sink",
   },
@@ -90,12 +99,15 @@ const AGENCY_PATTERNS: AgencyPattern[] = [
     score: 95,
     label: "ssrf-cloud-metadata",
   },
-  // Localhost / private-range / 0.0.0.0 URLs (SSRF).
+  // Localhost / private-range / 0.0.0.0 URLs (SSRF). Tool-scope only: a localhost
+  // URL in model OUTPUT prose ("open http://localhost:3000") is a normal dev
+  // instruction, not an SSRF action — only a real request target (tool scope) is.
   {
     pattern:
       /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?:[:/]|\b)/i,
     score: 80,
     label: "ssrf-internal-url",
+    toolOnly: true,
   },
   // file:// access.
   {
@@ -107,12 +119,13 @@ const AGENCY_PATTERNS: AgencyPattern[] = [
 
 export function scanExcessiveAgency(
   input: string,
-  _context?: ScanContext,
+  context?: ScanContext,
 ): ScanResult {
   let maxScore = 0;
   const matched: string[] = [];
 
-  for (const { pattern, score, label } of AGENCY_PATTERNS) {
+  for (const { pattern, score, label, toolOnly } of AGENCY_PATTERNS) {
+    if (toolOnly && context?.scope !== "tool") continue;
     if (pattern.test(input)) {
       matched.push(label);
       if (score > maxScore) maxScore = score;

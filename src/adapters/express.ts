@@ -63,20 +63,28 @@ export function aegisExpress(options: AegisExpressOptions = {}): RequestHandler 
       return;
     }
 
-    void guard.scan(text, { scope }).then((result) => {
-      if (result.safe) {
-        next();
-        return;
-      }
-      if (options.onBlock) {
-        options.onBlock(result, req, res);
-        return;
-      }
-      res.status(statusCode).json({
-        error: "Request blocked by gh-aegis",
-        threatType: result.threatType,
-        score: result.score,
+    void guard
+      .scan(text, { scope })
+      .then((result) => {
+        if (result.safe) {
+          next();
+          return;
+        }
+        if (options.onBlock) {
+          options.onBlock(result, req, res);
+          return;
+        }
+        res.status(statusCode).json({
+          error: "Request blocked by gh-aegis",
+          threatType: result.threatType,
+          score: result.score,
+        });
+      })
+      .catch(() => {
+        // Fail closed: never let a request through on an internal/handler error.
+        if (!res.headersSent) {
+          res.status(statusCode).json({ error: "Request blocked by gh-aegis (internal error)" });
+        }
       });
-    });
   };
 }

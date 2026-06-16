@@ -266,7 +266,7 @@ interface ScanResult {
 |---|---|---|---|
 | `enabled` | `AEGIS_ENABLED` | `false` | Master switch. Must be `true` (or env `"true"`) to scan. |
 | `verbose` | `AEGIS_VERBOSE` | `false` | Log blocks to stderr. |
-| `maxInputLength` | `AEGIS_MAX_INPUT` | `8192` | Truncate input to this length before regex scanning. |
+| `maxInputLength` | `AEGIS_MAX_INPUT` | `20000` | Max chars scanned (aligned with `maxLength` so padded-tail injections are not skipped). |
 | `allowedTools` | `ALLOWED_TOOLS` | `[]` | Default tool allowlist (env is comma-separated). |
 | `maxLength` | `AEGIS_MAX_LENGTH` | `20000` | LLM10: max raw input length before flagging. |
 | `maxCharRun` | `AEGIS_MAX_CHAR_RUN` | `800` | LLM10: max run of one repeated character. |
@@ -343,6 +343,11 @@ Use gh-aegis as a deterministic first line of defense and layer it with:
 - rate limiting and resource budgets (complements LLM10),
 - and, where you need semantic coverage, an ML classifier behind gh-aegis.
 
+Before 1.0, every detector regex was reviewed for **ReDoS / catastrophic backtracking** (the email and
+`rm -rf` patterns were rewritten to be linear/bounded; `npm run perf` gates p95) and for false positives
+on realistic benign traffic (the jailbreak/developer-mode/code-exec/localhost/IBAN over-matches were
+tightened — IBANs are now mod-97 validated). Regression tests pin each fix (`tests/review-regressions.test.ts`).
+
 `details` may describe which rule fired — keep it internal; never echo it to end users.
 
 ## Development
@@ -351,7 +356,7 @@ Use gh-aegis as a deterministic first line of defense and layer it with:
 npm install
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm test            # vitest run (276 tests)
+npm test            # vitest run (303 tests)
 npm run bench       # benchmark + threshold gate
 npm run perf        # latency benchmark + p95 perf gate
 npm run build       # emit dist/ (ESM + .d.ts)

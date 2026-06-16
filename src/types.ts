@@ -189,8 +189,11 @@ export interface AegisOptions {
   verbose?: boolean;
 
   /**
-   * Max input chars before truncation. Reads AEGIS_MAX_INPUT env var.
-   * Default: 8192.
+   * Max input chars scanned before truncation. Reads AEGIS_MAX_INPUT env var.
+   * Default: 20000 — aligned with `maxLength` so any input that is not rejected by
+   * the unbounded-consumption guard (which examines the raw input) is scanned in
+   * full, closing the "pad past the cap, then inject in the tail" bypass. All
+   * detectors are linear/bounded, so scanning the full window stays fast.
    */
   maxInputLength?: number;
 

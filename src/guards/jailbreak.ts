@@ -28,9 +28,12 @@ const JAILBREAK_PATTERNS: JailbreakPattern[] = [
     label: "do-anything-now",
   },
   {
-    pattern: /\bjailbreak\b/i,
+    // "jailbreak" as a directive against the model — not the bare noun, which is
+    // an everyday word (iOS jailbreaking, jailbreak detection, security education).
+    pattern:
+      /\bjailbreak\s+(?:the\s+|this\s+|your\s+|my\s+|an?\s+)?(?:ai|bot|assistant|model|llm|gpt|chatbot|system|prompt|filters?|guardrails?|safety)\b|\b(?:enable|activate|enter|initiate|trigger|run|perform|do|start)\s+(?:a\s+|the\s+)?jailbreak\b/i,
     score: 85,
-    label: "explicit-jailbreak-keyword",
+    label: "jailbreak-directive",
   },
   {
     pattern: /\[JAILBREAK\]|\[DAN\]|\[SUDO\]|\[UNRESTRICTED\]/i,
@@ -53,9 +56,12 @@ const JAILBREAK_PATTERNS: JailbreakPattern[] = [
     label: "disable-guardrails",
   },
   {
-    pattern: /developer\s+mode\s+(enabled|on|activated)/i,
+    // "developer mode" only as a jailbreak directive — the bare phrase is normal
+    // for Android Developer Options, Chrome unpacked extensions, IDE/CMS settings.
+    pattern:
+      /\bdeveloper\s+mode\b[^.?!]{0,60}\b(?:no\s+restrictions?|unrestricted|unfiltered|jailbreak|jailbroken|bypass|ignore|do\s+anything|disregard|skip\s+(?:all\s+)?(?:the\s+)?[a-z]*\s*(?:warnings?|filters?|rules?|safety|checks?|restrictions?|guardrails?)|without\s+(?:any\s+)?(?:limits?|restrictions?|filters?|rules?))\b/i,
     score: 85,
-    label: "developer-mode-activation",
+    label: "developer-mode-jailbreak",
   },
   {
     pattern: /\bsuperuser\s+mode\b/i,

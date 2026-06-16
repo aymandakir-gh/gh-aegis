@@ -1,8 +1,12 @@
-# STATUS — gh-aegis: v0.9.0 ✅ shipped, driving to v1.0.0
+# STATUS — gh-aegis: v1.0.0 🎉 shipped
 
-Extending the shipped v0.4.0 zero-ML OWASP-LLM guard to a 1.0 release. Plan + decisions in
-[PRD.md](./PRD.md); architecture in [PLAN.md](./PLAN.md). Strictly **zero-ML, zero runtime deps,
-deterministic, offline**; extend, never rebuild.
+**v1.0.0 reached.** Extended the shipped v0.4.0 zero-ML OWASP-LLM guard to a 1.0 release across tags
+v0.5.0 → v1.0.0, CI green at every tag. Plan + decisions in [PRD.md](./PRD.md); architecture in
+[PLAN.md](./PLAN.md). Strictly **zero-ML, zero runtime deps, deterministic, offline**; extended, never
+rebuilt. All v1.0.0 acceptance criteria met: 8 OWASP families · 466-sample benchmark (100% precision,
+0% FP, gate proven both directions) · declarative policy · latency bench + CI perf gate · 5
+integrations + a zero-network playground · 303 tests · adversarial review with every confirmed finding
+fixed. **Publish-ready but not published** (maintainer holds `NPM_TOKEN`).
 
 ## Roadmap (tags v0.5.0 → v1.0.0)
 
@@ -13,7 +17,7 @@ deterministic, offline**; extend, never rebuild.
 | **v0.7.0** | Declarative policy/config — zero-dep validator, CLI `--policy`, adapters honor it | ✅ shipped |
 | **v0.8.0** | Latency bench (`npm run perf`) + CI perf gate (p95 < documented budget) | ✅ shipped |
 | **v0.9.0** | LangChain callback guard + streaming-output guard + local zero-network playground | ✅ shipped |
-| v1.0.0 | Docs, multi-agent adversarial review + fixes + regression tests, ≥230 tests, pack audit | ⏳ next |
+| **v1.0.0** | Multi-agent adversarial review → fixed every confirmed finding + regression tests; docs; pack audit | ✅ shipped |
 
 ## v0.5.0 — what shipped
 
@@ -63,6 +67,33 @@ encoding, homoglyph, uncommon vector). Zero caught-malicious missed; zero benign
   per-category precision (purity).
 - `bench/thresholds.json` recomputed conservatively below the 466-sample baseline.
 
+## v1.0.0 — what shipped
+
+A **multi-agent adversarial review** (7 parallel reviewers across ReDoS, false positives, detection
+gaps, logic bugs, redaction, API/pack, dataset integrity; each finding independently verified) ran
+before the release. Every confirmed finding was fixed and pinned with a regression test
+(`tests/review-regressions.test.ts`):
+
+- **ReDoS (critical):** the email and `rm -rf` regexes had catastrophic backtracking (138ms / 27ms on
+  crafted ≤8 KB input). Rewritten to bounded/linear forms (now ~2.4ms / ~0.5ms). The `rm -rf` rewrite
+  also closes the `rm -fr` (flag-reorder) miss.
+- **False positives** (the headline-precision claim, hardened): bare `jailbreak` keyword, bare
+  `developer mode enabled`, bare `eval(`/`exec(`/`subprocess.run(` mentions, and localhost dev URLs in
+  output all over-blocked realistic benign traffic — each now requires an adversarial co-signal, a
+  weaponized argument, or the tool scope. IBANs are **mod-97 validated** (a new `validate` hook on
+  redaction patterns) so look-alike build hashes / order refs are not flagged.
+- **Detection gaps closed:** GitHub fine-grained PATs (`github_pat_…`) and current OpenAI project keys
+  (`sk-proj-…`) are now detected.
+- **Truncation bypass closed:** the input scan cap is aligned with the consumption limit (20000) so a
+  padded-tail injection is no longer skipped — safe now that all detectors are linear.
+- **Express adapter** fails closed if a block handler throws (no unhandled rejection).
+- **Dataset honesty:** two `-h` "evasion" samples were actually caught; relabeled to caught-malicious,
+  and a CI invariant now asserts every `-h`/`-e` sample is a genuine miss.
+
+Reviewer noise was filtered by the verification stage (e.g. a "0% FP benchmark is blind" framing and
+several non-defects were not actioned). No teach-to-test: fixes are principled generalizations, the
+benchmark numbers are unchanged, and per-category precision stays 100%.
+
 ## v0.9.0 — what shipped
 
 - **LangChain guard** (`src/adapters/langchain.ts`, `gh-aegis/langchain`): `aegisCallbackHandler()`
@@ -109,9 +140,9 @@ encoding, homoglyph, uncommon vector). Zero caught-malicious missed; zero benign
 
 ## Verification (local, all green)
 
-- `typecheck` / `lint` clean · `vitest` **276 passed** · `bench` gate **exit 0** · `perf` gate
+- `typecheck` / `lint` clean · `vitest` **303 passed** · `bench` gate **exit 0** · `perf` gate
   **exit 0** · `build` emits dist (incl. `dist/adapters/langchain.js`, `dist/stream.js`).
-- `npm pack` @ 0.9.0: dist + bin + README + LICENSE + package.json only; **no**
+- `npm pack` @ 1.0.0: dist + bin + README + LICENSE + package.json only; **no**
   datasets/scripts/tests/bench/examples/playground.
 - Playground verified: `app.js` runs the compiled `dist/index.js` and `analyze()` returns correct
   findings; orchestrator confirmed free of unguarded `process` access in the browser import chain.

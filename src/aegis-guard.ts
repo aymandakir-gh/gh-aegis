@@ -115,7 +115,7 @@ class DefaultAegisGuard implements AegisGuard {
     this.maxInputLength =
       options.maxInputLength ??
       p?.limits?.maxInputLength ??
-      Number(env("AEGIS_MAX_INPUT") ?? "8192");
+      Number(env("AEGIS_MAX_INPUT") ?? "20000");
     this.defaultAllowedTools =
       options.allowedTools ??
       p?.allowedTools ??

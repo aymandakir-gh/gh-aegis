@@ -20,6 +20,7 @@ import {
   EXPECTED,
   type BenchReport,
 } from "../scripts/bench";
+import { createAegisGuard } from "../src/index";
 
 let report: BenchReport;
 
@@ -51,6 +52,19 @@ describe("benchmark dataset integrity", () => {
       // cross-category attribution (which would be a purity violation).
       expect(m.got).toBe("safe");
     }
+  });
+
+  it("every evasion sample (-h/-e id) is a genuine miss (README guarantee)", async () => {
+    // datasets/README.md guarantees evasion-suffixed samples 'provably slip'. A
+    // caught -h/-e sample would be mislabeled and silently inflate recall.
+    const guard = createAegisGuard({ enabled: true });
+    const caught: string[] = [];
+    for (const s of loadSamples()) {
+      if (!/-(h|e)\d/.test(s.id)) continue;
+      const r = await guard.scan(s.text, { scope: s.scope });
+      if (!r.safe) caught.push(`${s.id} (${r.threatType})`);
+    }
+    expect(caught).toEqual([]);
   });
 });
 
