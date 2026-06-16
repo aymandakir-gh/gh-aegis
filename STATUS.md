@@ -1,9 +1,11 @@
-# STATUS — gh-aegis v0.4.0
+# STATUS — gh-aegis v0.4.0 ✅ shipped
 
-Leveling up from v0.3.1 (shipped utility) to a best-in-class **deterministic, zero-ML** LLM-security
+Leveled up from v0.3.1 (shipped utility) to a best-in-class **deterministic, zero-ML** LLM-security
 guard. See [PLAN.md](./PLAN.md) for the architecture and dataset/threshold strategy.
 
-**Target:** tag `v0.4.0`, publish-ready (maintainer runs `npm publish`). Zero-ML throughout; not published by this run.
+**Outcome:** `main` is tagged **v0.4.0**; CI (incl. the benchmark gate) is green on Node 20/22/24;
+the Release run built/tested/benchmarked and **skipped publish** (no `NPM_TOKEN`). Nothing was
+published — that's the maintainer's to run.
 
 ## Progress — all slices done
 
@@ -15,7 +17,7 @@ guard. See [PLAN.md](./PLAN.md) for the architecture and dataset/threshold strat
 | 4. CLI (`npx gh-aegis scan`) | ✅ | File/stdin, JSON + human, exit codes, 7 tests. |
 | 5. FP tuning | ✅ | 100% precision / 0% FP via the benchmark; recall reported honestly. |
 | 6. README + CI(bench) + v0.4.0 bump + pack audit | ✅ | Real numbers, integration snippets, CLI docs. |
-| 7. Tag v0.4.0 | ⏳ | After push + green CI. |
+| 7. Tag v0.4.0 | ✅ | Pushed; CI green; Release run green with publish skipped. |
 
 ## v0.4.0 benchmark baseline (`npm run bench`, 132 samples, FP rate 0.0%)
 
@@ -46,6 +48,9 @@ that deterministic regex cannot catch. Thresholds in `bench/thresholds.json` gat
   evasion tier; numbers are the first real run, never hand-set.
 - Detector tuning was principled generalization (articles, gerunds, token boundaries), not teach-to-test.
 - Phone pattern tightened with token boundaries — fixes a Google-key mis-attribution and improves precision.
+- GitHub push protection flagged a fake Stripe `rk_live_` key in the LLM02 dataset; scrubbed it from the
+  unpushed commit (filter-branch) and swapped in a non-secret IBAN sample that the detector still catches
+  (LLM02 recall unchanged at 80%). No real secrets were ever involved.
 
 ## Action required from maintainer
 
