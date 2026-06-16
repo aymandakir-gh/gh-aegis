@@ -1,7 +1,7 @@
 {
   "name": "gh-aegis",
-  "version": "0.3.1",
-  "description": "Defensive AI security middleware — prompt injection, jailbreak, PII detection + redaction, and tool-OOB detection for the OWASP LLM Top 10. Zero-ML: regex + rule engine.",
+  "version": "0.4.0",
+  "description": "Deterministic, zero-ML guard for the OWASP LLM Top 10 — prompt injection, PII redaction, sensitive disclosure, excessive agency, and unbounded consumption. Express/Fastify/AI-SDK adapters + CLI.",
   "keywords": [
     "owasp",
     "owasp-llm-top-10",

@@ -41,6 +41,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - run: npm run bench
       - name: Publish to npm
         if: ${{ env.NPM_TOKEN != '' }}
         run: npm publish --provenance --access public
