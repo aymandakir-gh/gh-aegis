@@ -53,8 +53,12 @@
     "./package.json": "./package.json"
   },
   "sideEffects": false,
+  "bin": {
+    "gh-aegis": "bin/gh-aegis.mjs"
+  },
   "files": [
     "dist",
+    "bin",
     "README.md",
     "LICENSE"
   ],
