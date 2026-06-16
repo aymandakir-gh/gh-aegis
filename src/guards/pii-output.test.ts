@@ -169,7 +169,9 @@ describe("scanPiiOutput — sanitized field always present", () => {
 // ── Integration: AegisGuard orchestrator scope routing ───────────────────────
 
 describe("AegisGuard — scope=output routes to PII guard", () => {
-  const aegis = createAegisGuard();
+  // Must be explicitly enabled: a disabled guard passes everything through, so
+  // these routing assertions only mean something when the guard is active.
+  const aegis = createAegisGuard({ enabled: true });
 
   test("scope=output with email → blocked + sanitized populated", async () => {
     const result = await aegis.scan("Reply to dev@company.com ASAP.", {
