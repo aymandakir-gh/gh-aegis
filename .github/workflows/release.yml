@@ -25,6 +25,10 @@ jobs:
   publish:
     name: Build, test & publish to npm
     runs-on: ubuntu-latest
+    env:
+      # Job-level env (readable in step `if:`) so we can skip — not fail — when
+      # the maintainer hasn't added the NPM_TOKEN secret yet.
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,7 +41,13 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - name: Publish
+      - name: Publish to npm
+        if: ${{ env.NPM_TOKEN != '' }}
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: NPM_TOKEN not configured — skipping publish
+        if: ${{ env.NPM_TOKEN == '' }}
+        run: |
+          echo "::warning title=Publish skipped::NPM_TOKEN secret is not set — built and tested, but did not publish."
+          echo "Add an npm automation token as the NPM_TOKEN repo secret (Settings → Secrets and variables → Actions), then re-run this workflow."
