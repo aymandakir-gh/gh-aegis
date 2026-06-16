@@ -1,0 +1,6 @@
+{
+  "_comment": "p95 latency budget (ms per call) for `npm run perf`, enforced in CI. Measured v0.8.0 baseline on a dev machine: per-detector p95 <= ~19µs, scan p95 <= ~53µs, inspect p95 ~80µs. Budgets are set ~25-50x above that so CI scheduling noise (and slower shared runners) never flakes, while a ReDoS-class regression (10ms+) still trips the gate. Tighten as the baseline is re-measured.",
+  "perDetectorP95Ms": 1.0,
+  "scanP95Ms": 2.0,
+  "inspectP95Ms": 4.0
+}

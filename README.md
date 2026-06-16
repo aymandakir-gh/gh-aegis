@@ -88,6 +88,25 @@ category drops below [`bench/thresholds.json`](./bench/thresholds.json); `tests/
 proves the gate trips in both directions. Layer gh-aegis with the defenses in
 [Security & design](#security--design) rather than relying on it alone.
 
+## Performance
+
+Zero-ML means **microsecond** verdicts — `npm run perf` measures per-detector and end-to-end latency
+over a fixed input set (incl. a ~2 KB blob) and reports p50/p95/p99. Representative p95 latency per
+call (dev machine, Node 24):
+
+| Stage | p95 |
+|---|---|
+| any single detector | ≤ ~20 µs |
+| `scan({ scope: "input" })` | ~32 µs |
+| `scan({ scope: "output" })` | ~53 µs |
+| `inspect()` (all 9 detectors) | ~80 µs |
+
+CI runs `npm run perf` as a **gate**: it fails the build if any p95 exceeds the documented budget in
+[`bench/perf-budget.json`](./bench/perf-budget.json) (per-detector ≤ 1 ms, scan ≤ 2 ms, inspect ≤ 4 ms —
+set ~25–50× above the measured baseline to absorb CI noise while still tripping on a ReDoS-class
+regression). `tests/perf-gate.test.ts` proves the gate works in both directions. No GPU, no inference
+bill, no rate limits — safe to run inline on every request.
+
 ## Usage
 
 `scan(input, context)` routes to the right detectors based on `context.scope`:
@@ -294,8 +313,9 @@ Use gh-aegis as a deterministic first line of defense and layer it with:
 npm install
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm test            # vitest run (249 tests)
+npm test            # vitest run (253 tests)
 npm run bench       # benchmark + threshold gate
+npm run perf        # latency benchmark + p95 perf gate
 npm run build       # emit dist/ (ESM + .d.ts)
 npm pack --dry-run  # inspect the publish tarball
 ```

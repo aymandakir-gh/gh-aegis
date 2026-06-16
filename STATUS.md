@@ -1,4 +1,4 @@
-# STATUS — gh-aegis: v0.7.0 ✅ shipped, driving to v1.0.0
+# STATUS — gh-aegis: v0.8.0 ✅ shipped, driving to v1.0.0
 
 Extending the shipped v0.4.0 zero-ML OWASP-LLM guard to a 1.0 release. Plan + decisions in
 [PRD.md](./PRD.md); architecture in [PLAN.md](./PLAN.md). Strictly **zero-ML, zero runtime deps,
@@ -11,8 +11,8 @@ deterministic, offline**; extend, never rebuild.
 | **v0.5.0** | LLM05 + LLM07 + LLM04 detectors → **8 OWASP families**, orchestrator + inspect wiring, dataset re-label, re-baselined bench | ✅ shipped |
 | **v0.6.0** | Benchmark grown to **466 samples** (evasion tier), per-category metrics, CI gate proven both directions | ✅ shipped |
 | **v0.7.0** | Declarative policy/config — zero-dep validator, CLI `--policy`, adapters honor it | ✅ shipped |
-| v0.8.0 | Latency bench + CI perf gate (p95 < budget) | ⏳ next |
-| v0.9.0 | LangChain guard + streaming guard + local playground | ⏳ |
+| **v0.8.0** | Latency bench (`npm run perf`) + CI perf gate (p95 < documented budget) | ✅ shipped |
+| v0.9.0 | LangChain guard + streaming guard + local playground | ⏳ next |
 | v1.0.0 | Docs, multi-agent adversarial review + fixes + regression tests, ≥230 tests, pack audit | ⏳ |
 
 ## v0.5.0 — what shipped
@@ -63,6 +63,18 @@ encoding, homoglyph, uncommon vector). Zero caught-malicious missed; zero benign
   per-category precision (purity).
 - `bench/thresholds.json` recomputed conservatively below the 466-sample baseline.
 
+## v0.8.0 — what shipped
+
+- **Latency benchmark** (`scripts/perf.ts`, `npm run perf`): measures per-detector + end-to-end
+  (`scan` per scope, `inspect`) latency over a fixed input set (incl. a ~2 KB blob), reports
+  p50/p95/p99/mean → `bench/perf.json` + `bench/PERF.md`. Measured p95: any detector ≤ ~20µs,
+  scan:input ~32µs, scan:output ~53µs, inspect ~80µs — the zero-ML speed claim, proven.
+- **CI perf gate**: `npm run perf` fails the build if any p95 exceeds `bench/perf-budget.json`
+  (per-detector ≤ 1ms, scan ≤ 2ms, inspect ≤ 4ms — ~25–50× over baseline to absorb CI noise while
+  still tripping a ReDoS-class regression). Added to `ci.yml` + `release.yml`.
+- **`tests/perf-gate.test.ts`** proves the gate passes at the budget and fails against an impossibly
+  tight one (both directions), and that percentiles are finite + ordered.
+
 ## v0.7.0 — what shipped
 
 - **Declarative policy** (`src/policy.ts`): a JSON policy toggles detectors on/off, restricts scopes,
@@ -78,8 +90,9 @@ encoding, homoglyph, uncommon vector). Zero caught-malicious missed; zero benign
 
 ## Verification (local, all green)
 
-- `typecheck` / `lint` clean · `vitest` **249 passed** · `bench` gate **exit 0** · `build` emits dist.
-- `npm pack` @ 0.7.0: dist + bin + README + LICENSE + package.json only; **no**
+- `typecheck` / `lint` clean · `vitest` **253 passed** · `bench` gate **exit 0** · `perf` gate
+  **exit 0** · `build` emits dist.
+- `npm pack` @ 0.8.0: dist + bin + README + LICENSE + package.json only; **no**
   datasets/scripts/tests/bench/examples.
 
 ## Decisions / log

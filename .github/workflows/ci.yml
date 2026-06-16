@@ -26,3 +26,4 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run bench
+      - run: npm run perf

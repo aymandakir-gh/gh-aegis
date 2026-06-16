@@ -42,6 +42,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run bench
+      - run: npm run perf
       - name: Publish to npm
         if: ${{ env.NPM_TOKEN != '' }}
         run: npm publish --provenance --access public
