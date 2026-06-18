@@ -74,6 +74,41 @@ describe("scanUnboundedConsumption — direct", () => {
     );
     expect(r.safe).toBe(true);
   });
+
+  // Perf short-circuit: once length alone proves a violation (score 90), the
+  // detector must skip the O(n) char/token/regex scans and still block.
+  it("short-circuits on oversized input and still blocks (score 90)", () => {
+    const r = scanUnboundedConsumption("a".repeat(50_000), {
+      ...DEFAULT_CONSUMPTION_LIMITS,
+      maxLength: 10,
+    });
+    expect(r.safe).toBe(false);
+    expect(r.threatType).toBe(ThreatType.UNBOUNDED_CONSUMPTION);
+    expect(r.score).toBe(90);
+    expect(r.details?.[0]).toContain("length=");
+  });
+
+  it("bounds work on a multi-MB oversized input (returns fast, still blocked)", () => {
+    // 8MB of 1M distinct tokens — the worst case for the token-count Map. With
+    // the short-circuit this must not do the O(n) Map build, so it stays quick.
+    const huge = Array.from({ length: 1_000_000 }, (_, i) => "t" + i).join(" ");
+    const t0 = performance.now();
+    const r = scanUnboundedConsumption(huge, DEFAULT_CONSUMPTION_LIMITS);
+    const elapsed = performance.now() - t0;
+    expect(r.safe).toBe(false);
+    expect(r.score).toBe(90);
+    // Without the short-circuit this was ~190ms; well under 50ms now.
+    expect(elapsed).toBeLessThan(50);
+  });
+
+  it("still runs the full analysis on a within-limit char-run", () => {
+    const r = scanUnboundedConsumption("z".repeat(1000), {
+      ...DEFAULT_CONSUMPTION_LIMITS,
+      maxCharRun: 800,
+    });
+    expect(r.safe).toBe(false);
+    expect(r.details?.[0]).toContain("char-run=");
+  });
 });
 
 describe("AegisGuard — scope=input routes to unbounded-consumption", () => {
