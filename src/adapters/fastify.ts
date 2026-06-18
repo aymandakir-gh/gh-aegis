@@ -27,7 +27,8 @@ export interface AegisFastifyOptions extends AegisOptions {
   statusCode?: number;
   /**
    * Extract the text to scan from the request.
-   * Default: first string found in body among message/input/prompt/text/content/query.
+   * Default: every string field present in the body among
+   * message/input/prompt/text/content/query, joined with newlines.
    */
   getText?: (req: FastifyRequest) => string | undefined;
   /** Custom block handler. Default: `reply.code(statusCode).send({ ... })`. */
@@ -41,9 +42,16 @@ function defaultGetText(req: FastifyRequest): string | undefined {
   if (typeof body === "string") return body;
   if (body && typeof body === "object") {
     const record = body as Record<string, unknown>;
+    // Scan EVERY known field present, not just the first match. Returning only
+    // the first field let a benign `message` shadow a malicious `prompt`/
+    // `content`/`query` in the same body, bypassing the guard entirely. The
+    // fields are joined with newlines so a single scan covers them all.
+    const parts: string[] = [];
     for (const field of DEFAULT_FIELDS) {
-      if (typeof record[field] === "string") return record[field] as string;
+      const value = record[field];
+      if (typeof value === "string" && value.length > 0) parts.push(value);
     }
+    if (parts.length > 0) return parts.join("\n");
   }
   return undefined;
 }
