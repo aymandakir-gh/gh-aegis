@@ -54,6 +54,23 @@ export interface AegisLangChainOptions extends AegisOptions {
   scanToolInput?: boolean;
 }
 
+/**
+ * Best-effort tool name from LangChain's serialized tool descriptor. LangChain
+ * passes the tool's serialized form as the first arg to `handleToolStart`; the
+ * name lives at `.name` (LCEL Runnables) or as the last segment of `.id` (the
+ * Serializable constructor path, e.g. `["langchain", "tools", "Calculator"]`).
+ */
+function toolName(tool: unknown): string {
+  if (typeof tool !== "object" || tool === null) return "";
+  const t = tool as Record<string, unknown>;
+  if (typeof t["name"] === "string") return t["name"];
+  if (Array.isArray(t["id"])) {
+    const last = t["id"][t["id"].length - 1];
+    if (typeof last === "string") return last;
+  }
+  return "";
+}
+
 /** Flatten a LangChain message's content (string or array of text parts) to text. */
 function messageText(message: MessageLike | undefined): string {
   const content = message?.content;
@@ -85,11 +102,31 @@ export function aegisCallbackHandler(
 ): AegisCallbackHandler {
   const guard = createAegisGuard({ enabled: true, ...options });
   const scanToolInput = options.scanToolInput ?? true;
+  // Was an allowlist opted into (option > policy > env)? The tool-call-OOB guard
+  // fails closed on an EMPTY list (blocks every tool), so we only gate tool names
+  // when the user actually configured one — otherwise we'd break unguarded chains.
+  const envAllowed =
+    typeof process !== "undefined" && process.env
+      ? process.env["ALLOWED_TOOLS"]
+      : undefined;
+  const allowlistConfigured =
+    (options.allowedTools?.length ?? 0) > 0 ||
+    (options.policy?.allowedTools?.length ?? 0) > 0 ||
+    (envAllowed?.trim().length ?? 0) > 0;
 
   async function check(text: string, phase: "input" | "output"): Promise<void> {
     if (!text) return;
     const r = await guard.scan(text, { scope: phase });
     if (!r.safe) throw new AegisBlockedError(phase, r);
+  }
+
+  // Tool-scope scan of the tool NAME: enforces the allowlist (LLM08
+  // tool-call-OOB) and the tool-only SSRF patterns that the output-scope content
+  // scan deliberately skips. Scope "tool" is what activates both guards.
+  async function checkTool(name: string): Promise<void> {
+    if (!name) return;
+    const r = await guard.scan(name, { scope: "tool" });
+    if (!r.safe) throw new AegisBlockedError("tool", r);
   }
 
   return {
@@ -109,7 +146,17 @@ export function aegisCallbackHandler(
         }
       }
     },
-    async handleToolStart(_tool, input) {
+    async handleToolStart(tool, input) {
+      // Enforce the tool allowlist when one is configured (an empty list fails
+      // closed and would block every tool, so only gate when the user opted in).
+      // The tool identity comes from LangChain's serialized descriptor; when that
+      // carries no name (e.g. a bare {} in tests/custom runners) we fall back to
+      // the input string, which then doubles as the tool identifier.
+      if (allowlistConfigured) {
+        const name = toolName(tool) || (typeof input === "string" ? input : "");
+        await checkTool(name);
+      }
+      // Dangerous content / secrets in the tool's arguments (output scope).
       if (scanToolInput && typeof input === "string") await check(input, "output");
     },
   };
