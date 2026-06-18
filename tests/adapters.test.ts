@@ -79,6 +79,20 @@ describe("aegisExpress", () => {
     await vi.waitFor(() => expect(next).toHaveBeenCalledTimes(1));
     expect(res.status).not.toHaveBeenCalled();
   });
+
+  it("scans every field, not just the first (no benign-field shadowing)", async () => {
+    const mw = aegisExpress({ scope: "input" });
+    // `message` is benign and precedes `prompt` in DEFAULT_FIELDS order; the
+    // malicious `prompt` must still be caught. The first-field-only bug let
+    // this exact shape bypass the guard entirely.
+    const req: any = { body: { message: BENIGN, prompt: INJECTION } };
+    const res = mockRes();
+    const next = vi.fn();
+    mw(req, res, next);
+    await vi.waitFor(() => expect(res.status).toHaveBeenCalledWith(400));
+    expect(res.body.threatType).toBe("PROMPT_INJECTION");
+    expect(next).not.toHaveBeenCalled();
+  });
 });
 
 // ─── Fastify ──────────────────────────────────────────────────────────────────
@@ -132,6 +146,22 @@ describe("aegisFastify", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(handler).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it("scans every field, not just the first (no benign-field shadowing)", async () => {
+    const app = Fastify();
+    const handler = vi.fn(async () => ({ ok: true }));
+    app.addHook("preHandler", aegisFastify({ scope: "input" }));
+    app.post("/chat", handler);
+    const res = await app.inject({
+      method: "POST",
+      url: "/chat",
+      payload: { message: BENIGN, prompt: INJECTION },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().threatType).toBe("PROMPT_INJECTION");
+    expect(handler).not.toHaveBeenCalled();
     await app.close();
   });
 });
