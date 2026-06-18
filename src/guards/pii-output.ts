@@ -1,7 +1,8 @@
 /**
  * PII Output guard — LLM02
  * Detects personally identifiable information in LLM responses.
- * Patterns: email, phone, IBAN, API keys, GitHub tokens, codice fiscale.
+ * Patterns: email, phone, IBAN, API keys, GitHub tokens, codice fiscale,
+ * Bearer tokens, and JSON Web Tokens (JWTs).
  *
  * v0.2: adds `sanitized` to every ScanResult — each PII match is replaced
  * with `[REDACTED:<pattern-label>]` so callers can surface safe output.
@@ -90,11 +91,27 @@ export const PII_PATTERNS: RedactPattern[] = [
     score: 85,
     label: "codice-fiscale",
   },
-  // Generic high-entropy tokens (Bearer tokens, JWT-like strings ≥32 hex chars)
+  // Bearer authorization tokens. The token body excludes `.`, so for a
+  // Bearer-prefixed JWT this matches only the header segment — the dedicated
+  // JWT pattern below (higher score) wins overlap resolution and redacts the
+  // whole token (header.payload.signature) instead.
   {
     pattern: /\bBearer\s+[a-zA-Z0-9\-_]{32,}\b/,
     score: 90,
     label: "bearer-token",
+  },
+  // JSON Web Tokens (header.payload.signature, each base64url). Every JWT header
+  // is a JSON object beginning `{"`, which base64url-encodes to the literal
+  // prefix `eyJ` — a highly specific anchor that keeps false positives near zero.
+  // A bare JWT is both a bearer credential and a PII carrier (the payload often
+  // holds `sub`, `email`, and `name` claims), so it must be redacted whole, with
+  // or without a `Bearer` prefix. Score 92 > bearer-token (90) so overlap
+  // resolution always prefers the full three-segment span.
+  {
+    pattern:
+      /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}(?![A-Za-z0-9_-])/,
+    score: 92,
+    label: "jwt",
   },
 ];
 
