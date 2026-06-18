@@ -35,6 +35,30 @@ describe("createStreamGuard", () => {
     expect(r2.result.threatType).toBe(ThreatType.IMPROPER_OUTPUT);
   });
 
+  it("detects PII in a single chunk larger than the window (no size-based evasion)", async () => {
+    // A non-streaming completion fed as one chunk: PII at the start, then more
+    // than `window` chars of trailing text. The leading bytes must still be scanned.
+    const sg = createStreamGuard({ window: 256 });
+    const r = await sg.push("Contact alice@example.com. " + "x".repeat(400));
+    expect(r.blocked).toBe(true);
+    expect(r.result.threatType).toBe(ThreatType.PII_OUTPUT);
+  });
+
+  it("verdict is independent of chunk size for identical content", async () => {
+    const text = "Reach me at bob@example.com. " + "filler ".repeat(80);
+    const big = createStreamGuard({ window: 128 });
+    const oneShot = await big.push(text);
+
+    const split = createStreamGuard({ window: 128 });
+    let splitBlocked = false;
+    for (let i = 0; i < text.length; i += 32) {
+      const r = await split.push(text.slice(i, i + 32));
+      if (r.blocked) splitBlocked = true;
+    }
+    expect(oneShot.blocked).toBe(true);
+    expect(splitBlocked).toBe(true);
+  });
+
   it("latches blocked: a later clean chunk does not un-block", async () => {
     const sg = createStreamGuard();
     await sg.push("leaking sk-abcdefghijklmnopqrstuvwxyz012345 ");
