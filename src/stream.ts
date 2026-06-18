@@ -6,9 +6,11 @@
  * accumulated output on every push rather than each chunk in isolation. Once any
  * detector trips, the guard latches `blocked` so later (clean) chunks stay blocked.
  *
- * The window (default 8192 chars) bounds per-push cost to O(window) — any realistic
- * attack pattern is far shorter than the window, and the guard scans on every push,
- * so a pattern completing in a chunk is always within the window at that moment.
+ * The window (default 8192 chars) is the straddle context: every push scans the
+ * full newly-appended chunk plus the preceding `window` chars, so a pattern is seen
+ * the moment its final character arrives, even when a single push is larger than the
+ * window (e.g. a non-streaming completion fed through `guardTextStream` as one chunk).
+ * Per-push cost is O(window + chunk) — O(window) for the usual small token chunks.
  *
  * Framework-agnostic and zero-dependency. Compose it with any async iterable of
  * strings via `guardTextStream`, or drive it manually with `createStreamGuard`.
@@ -54,8 +56,12 @@ export function createStreamGuard(options: StreamGuardOptions = {}): StreamGuard
   let blocked = false;
   let last: ScanResult = SAFE;
 
-  async function rescan(): Promise<StreamGuardResult> {
-    const slice = buf.length > window ? buf.slice(buf.length - window) : buf;
+  // Scan the last `chunkLen + window` chars: the whole chunk just appended (so its
+  // leading bytes are never skipped, even if the chunk is larger than the window)
+  // plus `window` chars of prior context to catch a pattern straddling the boundary.
+  async function rescan(chunkLen: number): Promise<StreamGuardResult> {
+    const span = chunkLen + window;
+    const slice = buf.length > span ? buf.slice(buf.length - span) : buf;
     last = await guard.scan(slice, { scope });
     if (!last.safe) blocked = true;
     return { safe: !blocked, blocked, result: last };
@@ -64,11 +70,11 @@ export function createStreamGuard(options: StreamGuardOptions = {}): StreamGuard
   return {
     async push(chunk: string): Promise<StreamGuardResult> {
       buf += chunk;
-      return rescan();
+      return rescan(chunk.length);
     },
     async end(): Promise<StreamGuardResult> {
       if (buf.length === 0) return { safe: !blocked, blocked, result: last };
-      return rescan();
+      return rescan(0);
     },
     buffer: () => buf,
   };
