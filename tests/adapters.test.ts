@@ -226,4 +226,51 @@ describe("aegisMiddleware (Vercel AI SDK)", () => {
     });
     expect(out).toBe(result);
   });
+
+  // streamText() routes through wrapStream, not wrapGenerate; these guard against
+  // the regression where streamed output was never scanned.
+  const delta = (text: string): any => ({ type: "text-delta", id: "1", delta: text });
+  function streamOf(parts: any[]): any {
+    return {
+      stream: new ReadableStream({
+        start(controller) {
+          for (const p of parts) controller.enqueue(p);
+          controller.close();
+        },
+      }),
+    };
+  }
+  async function drain(stream: ReadableStream<any>): Promise<string> {
+    const reader = stream.getReader();
+    let out = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.type === "text-delta") out += value.delta;
+    }
+    return out;
+  }
+
+  it("passes benign streamed output through unchanged via wrapStream", async () => {
+    const mw = aegisMiddleware();
+    const out = await mw.wrapStream!({
+      doStream: async () => streamOf([delta("All "), delta("systems "), delta("nominal.")]),
+      doGenerate: (async () => ({})) as any,
+      params: params("status?") as any,
+      model: {} as any,
+    });
+    expect(await drain(out.stream)).toBe("All systems nominal.");
+  });
+
+  it("blocks PII that completes across streamed deltas via wrapStream", async () => {
+    const mw = aegisMiddleware();
+    const out = await mw.wrapStream!({
+      doStream: async () =>
+        streamOf([delta("Reach me at "), delta("admin@"), delta("example.com.")]),
+      doGenerate: (async () => ({})) as any,
+      params: params("contact?") as any,
+      model: {} as any,
+    });
+    await expect(drain(out.stream)).rejects.toBeInstanceOf(AegisBlockedError);
+  });
 });

@@ -3,7 +3,8 @@
  *
  * `aegisMiddleware()` is a `LanguageModelMiddleware` you pass to `wrapLanguageModel`.
  * It scans the prompt (LLM01/LLM10) before the model runs and the generated text
- * (LLM02/LLM06/LLM08) after, throwing `AegisBlockedError` on a violation.
+ * (LLM02/LLM06/LLM08) after — for BOTH `generateText` (`wrapGenerate`) and
+ * `streamText` (`wrapStream`) — throwing `AegisBlockedError` on a violation.
  *
  * Zero runtime dependency on the AI SDK — the import is type-only.
  *
@@ -14,6 +15,7 @@
  */
 import type { LanguageModelMiddleware } from "ai";
 import { createAegisGuard } from "../aegis-guard.js";
+import { createStreamGuard } from "../stream.js";
 import type { AegisOptions } from "../types.js";
 import { AegisBlockedError } from "../errors.js";
 
@@ -100,6 +102,34 @@ export function aegisMiddleware(
         if (!scan.safe) throw new AegisBlockedError("output", scan);
       }
       return result;
+    },
+    wrapStream: async ({ doStream }) => {
+      // streamText() routes through wrapStream — NOT wrapGenerate — so without
+      // this hook every output guard (PII/disclosure/improper-output/agency) was
+      // silently bypassed for streamed responses. Feed accumulated text deltas
+      // through the same sliding-window stream guard and error the stream the
+      // moment a detector trips, before the offending delta reaches the consumer.
+      const result = await doStream();
+      const sg = createStreamGuard({ enabled: true, ...options, scope: "output" });
+      const stream = result.stream.pipeThrough(
+        new TransformStream({
+          async transform(part, controller) {
+            if (
+              isRecord(part) &&
+              part["type"] === "text-delta" &&
+              typeof part["delta"] === "string"
+            ) {
+              const r = await sg.push(part["delta"]);
+              if (r.blocked) {
+                controller.error(new AegisBlockedError("output", r.result));
+                return;
+              }
+            }
+            controller.enqueue(part);
+          },
+        }),
+      );
+      return { ...result, stream };
     },
   };
 }
