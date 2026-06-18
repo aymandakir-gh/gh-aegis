@@ -116,6 +116,42 @@ describe("scanPiiOutput — PII pattern detection (all 8 types)", () => {
   });
 });
 
+// ── Direct guard: JSON Web Tokens (regression — bare JWTs used to leak) ───────
+
+describe("scanPiiOutput — JWT detection (score 92)", () => {
+  // header.payload.signature — payload carries a PII `email` claim.
+  const JWT =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" +
+    ".eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwiOiJhbGljZUBhY21lLmNvbSJ9" +
+    ".dQw4w9WgXcQ_3kFZ5p2nLxY8vT1aB6cD7eF0gH2iJkL";
+
+  test("detects and redacts a bare JWT (no Bearer prefix)", () => {
+    const result = scanPiiOutput(`Your session token is ${JWT}`);
+    expect(result.safe).toBe(false);
+    expect(result.threatType).toBe(ThreatType.PII_OUTPUT);
+    expect(result.score).toBe(92);
+    expect(result.sanitized).toContain("[REDACTED:jwt]");
+    expect(result.sanitized).not.toContain(JWT);
+  });
+
+  test("redacts the WHOLE Bearer JWT — payload and signature do not leak", () => {
+    const result = scanPiiOutput(`Authorization: Bearer ${JWT}`);
+    expect(result.safe).toBe(false);
+    // Every segment must be gone, including the PII-bearing payload.
+    expect(result.sanitized).not.toContain("eyJzdWIiOiIxMjM0NTY3ODkwIiwiZW1haWwi");
+    expect(result.sanitized).not.toContain("dQw4w9WgXcQ_3kFZ5p2nLxY8vT1aB6cD7eF0gH2iJkL");
+    expect(result.sanitized).not.toContain("alice@acme.com");
+    expect(result.sanitized).toContain("[REDACTED:jwt]");
+  });
+
+  test("does not flag a dotted non-JWT identifier (no eyJ header)", () => {
+    const input = "Build artifact path: com.acme.service.v2 is ready.";
+    const result = scanPiiOutput(input);
+    expect(result.safe).toBe(true);
+    expect(result.sanitized).toBe(input);
+  });
+});
+
 // ── Direct guard: multi-PII and cumulative redaction ─────────────────────────
 
 describe("scanPiiOutput — multi-PII cumulative redaction", () => {

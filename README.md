@@ -42,7 +42,7 @@ Requires Node ≥ 18. Ships as ESM with TypeScript types.
 | OWASP | What it catches | `ThreatType` | Scope |
 |---|---|---|---|
 | **LLM01** Prompt Injection | "ignore previous instructions", `<system>` injection, DAN/`[JAILBREAK]`, "developer mode", "disable your guardrails", "override your safety" | `PROMPT_INJECTION`, `JAILBREAK` | input |
-| **LLM02** Insecure Output / PII | email, phone, IBAN, OpenAI/Stripe/GitHub/Anthropic keys, codice fiscale, Bearer tokens — **detected & redacted** | `PII_OUTPUT` | output |
+| **LLM02** Insecure Output / PII | email, phone, IBAN, OpenAI/Stripe/GitHub/Anthropic keys, codice fiscale, Bearer tokens, JWTs — **detected & redacted** | `PII_OUTPUT` | output |
 | **LLM04** Data & Model Poisoning | invisible-Unicode payload smuggling — Tags-block "ASCII smuggling" (U+E00xx), bidi overrides (Trojan Source), zero-width characters hidden inside words | `DATA_POISONING` | input, output |
 | **LLM05** Improper Output Handling | active content destined for a downstream renderer — `<script>`/event-handler XSS, `javascript:`/`data:text/html` URIs, `<iframe>`, SSTI (`{{7*7}}`, Jinja internals, `${…}` sinks), markdown-exfil links, ANSI/terminal escapes | `IMPROPER_OUTPUT` | output |
 | **LLM06** Sensitive Disclosure | private keys, AWS/Google/Slack tokens, credentialed connection strings, `password=`/`api_key=` assignments | `SENSITIVE_DISCLOSURE` | output |
