@@ -67,9 +67,23 @@ export function scanUnboundedConsumption(
   const signals: string[] = [];
   let score = 0;
 
+  // Length alone is already a block (score 90). Short-circuit before the O(n)
+  // char/token/regex scans below: those walk every character and build a Map
+  // over every whitespace-delimited token, costing hundreds of ms of
+  // synchronous, event-loop-blocking CPU on a multi-MB body — for no extra
+  // detection benefit, since the verdict is already "block". This guard runs on
+  // RAW (untruncated) input by design, so this cheap length check is the right
+  // place to bound worst-case work; within-limit inputs (<= maxLength) still get
+  // the full char-run / token-repeat / unbounded-request analysis below.
   if (input.length > limits.maxLength) {
-    signals.push(`length=${input.length}>${limits.maxLength}`);
-    score = Math.max(score, 90);
+    return {
+      safe: false,
+      threatType: ThreatType.UNBOUNDED_CONSUMPTION,
+      score: 90,
+      details: [
+        `Unbounded consumption: length=${input.length}>${limits.maxLength}`,
+      ],
+    };
   }
 
   const charRun = longestCharRun(input);
